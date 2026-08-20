@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+uv.lock.bak
+.coverage
+
+# Node
+node_modules/
+.next/
+out/
+frontend/*.tsbuildinfo
+
+# Env
+.env
+.env.local
+!.env.example
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Docker
+*.pid
+
+# Data
+data/
+
+# Eval reports are generated per-run and depend on which backend mode
+# produced them (real vs. synthetic) — eval/RESULTS.md documents the
+# current figures instead of committing raw report dumps.
+eval/results/*.json

@@ -1,0 +1,249 @@
+# Production compose file — see docs/ARCHITECTURE.md § Production deployment
+# for the reasoning behind every deviation from infra/docker-compose.yml
+# (the dev stack). Deliberately kept at the repo root, not infra/, so
+# Docker Compose's own `.env` auto-discovery (same directory as the compose
+# file) lines up with where an operator creates their real secrets file.
+#
+# Usage:
+#   cp .env.prod.example .env   # then fill in every blank value
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Settings load order per app container: backend/.env.example (tracked,
+# non-secret defaults) first, then the untracked root .env (secrets +
+# production overrides) second — env_file lists apply in order, with later
+# files winning, so .env only needs to contain what actually differs.
+
+name: rag-knowledge-assistant-prod
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    # No published ports — only backend/celery-worker/migrate, all on this
+    # compose network, ever need to reach it. A dev-only convenience in
+    # infra/docker-compose.yml, deliberately dropped here.
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    restart: unless-stopped
+    environment:
+      # Nested-config env var (Qdrant's own convention: double underscore =
+      # one level of YAML nesting, i.e. service.api_key) — required so the
+      # same QDRANT_API_KEY the app is configured with actually locks down
+      # Qdrant's HTTP/gRPC API rather than leaving it open to anything that
+      # can reach this container.
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+
+  # Local LLM server for CHAT_PROVIDER=ollama (the default). No published
+  # port — only backend/celery-worker, on this compose network, ever need
+  # to reach it, same "internal services publish nothing" rule as
+  # postgres/redis/qdrant above.
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+
+  # One-shot: pulls the chat model into the `ollama` service above, then
+  # exits 0 — same service_completed_successfully pattern as `migrate`
+  # below, so a deploy is still `docker compose up -d --build`, never a
+  # separate manual `ollama pull` step. Only actually downloads anything on
+  # the first deploy; the model persists in the ollama_data volume after.
+  ollama-init:
+    image: ollama/ollama:latest
+    restart: "no"
+    environment:
+      OLLAMA_HOST: ollama:11434
+    command: ["pull", "${OLLAMA_CHAT_MODEL:-llama3.2:3b}"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  # One-shot: applies pending Alembic migrations, then exits 0. backend/
+  # celery-worker both wait on this succeeding (service_completed_successfully)
+  # rather than either of them racing to run migrations themselves, or the
+  # deploy flow needing a separate manual `alembic upgrade head` step.
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - backend/.env.example
+      - .env
+    environment:
+      POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+    restart: unless-stopped
+    env_file:
+      - backend/.env.example
+      - .env
+    environment:
+      POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/1
+      QDRANT_URL: http://qdrant:6333
+      OLLAMA_BASE_URL: http://ollama:11434
+    # Published directly for a single-VM deploy, matching how this is
+    # smoke-tested (item 6). A real internet-facing deployment should put a
+    # TLS-terminating reverse proxy (Caddy/nginx) in front and not expose
+    # this port publicly — deliberately out of scope here, see
+    # docs/ARCHITECTURE.md § Production deployment for why.
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+
+  # No celery-beat service: this system has no periodic/scheduled tasks —
+  # process_document is only ever enqueued on-demand from the upload
+  # endpoint (see app/core/celery_app.py, which sets no beat_schedule).
+  # Scale with `docker compose -f docker-compose.prod.yml up -d --scale
+  # celery-worker=N` if upload volume ever justifies more than one.
+  celery-worker:
+    build:
+      context: .
+      dockerfile: infra/docker/backend.Dockerfile
+    restart: unless-stopped
+    command: ["celery", "-A", "app.core.celery_app", "worker", "--loglevel=info"]
+    env_file:
+      - backend/.env.example
+      - .env
+    environment:
+      POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/1
+      QDRANT_URL: http://qdrant:6333
+      OLLAMA_BASE_URL: http://ollama:11434
+    volumes:
+      - uploads_data:/data/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.core.celery_app inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 3G
+
+  frontend:
+    build:
+      context: .
+      dockerfile: infra/docker/frontend.Dockerfile
+      args:
+        # Baked into the client JS bundle at build time — Next.js
+        # NEXT_PUBLIC_* vars are not runtime-configurable, so this must
+        # already be the URL browsers will use to reach the backend before
+        # the image is built. See .env.prod.example.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "3000:3000"
+    depends_on:
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  uploads_data:
+  ollama_data:

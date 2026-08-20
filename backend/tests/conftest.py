@@ -1,0 +1,56 @@
+from collections.abc import AsyncGenerator
+
+import pytest
+import redis.asyncio as aioredis
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import get_settings
+from app.core.db import AsyncSessionLocal, engine
+from app.core.vector_store import get_vector_store
+from app.main import app
+
+settings = get_settings()
+
+
+@pytest.fixture(autouse=True)
+async def _clean_state() -> AsyncGenerator[None, None]:
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                "TRUNCATE TABLE refresh_tokens, chunks, document_versions, documents, users"
+                " CASCADE"
+            )
+        )
+
+    redis_client = aioredis.from_url(settings.redis_url)
+    await redis_client.flushdb()
+    await redis_client.aclose()
+
+    # Drop and let the next ensure_collection() recreate it — mirrors the
+    # Postgres TRUNCATE above: every test starts against a genuinely empty
+    # Qdrant collection, not one carrying leftover points from a previous
+    # test. Reaching into VectorStore's "private" client/flag here is
+    # test-only cleanup, not a pattern to follow in application code.
+    vector_store = get_vector_store()
+    try:
+        await vector_store._client.delete_collection(settings.qdrant_collection)
+    except Exception:
+        pass
+    vector_store._ensured = False
+
+    yield
+
+
+@pytest.fixture
+async def client() -> AsyncGenerator[AsyncClient, None]:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+@pytest.fixture
+async def db_session() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        yield session

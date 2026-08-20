@@ -1,0 +1,214 @@
+{
+  "description": "A small synthetic company knowledge base (employee handbook, engineering practices, product FAQ) used to evaluate the retrieval and generation pipelines end to end. Queries are hand-crafted to cover single-chunk lookups, multi-chunk answers, cross-document topical discrimination (e.g. two different kinds of \"PTO\"), a PDF with real (not estimated) page numbers, and one deliberately out-of-corpus question.",
+  "documents": [
+    {
+      "id": "employee_handbook",
+      "path": "documents/employee_handbook.md",
+      "file_type": "md"
+    },
+    {
+      "id": "engineering_practices",
+      "path": "documents/engineering_practices.md",
+      "file_type": "md"
+    },
+    {
+      "id": "product_faq",
+      "path": "documents/product_faq.pdf",
+      "file_type": "pdf"
+    }
+  ],
+  "queries": [
+    {
+      "id": "q01",
+      "query": "How many days of PTO do full-time employees accrue each year?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "employee_handbook", "content_marker": "15 days of paid time off" }
+      ],
+      "reference_answer": "Full-time employees accrue 15 days of PTO per year, at a rate of 1.25 days per completed month, though accrual doesn't begin until after the 90-day probationary period."
+    },
+    {
+      "id": "q02",
+      "query": "Can unused PTO be carried over to the next year, and if so how much?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "employee_handbook", "content_marker": "carries over into the following year up to a maximum of 5 days" }
+      ],
+      "reference_answer": "Yes, up to 5 days of unused PTO carry over into the next year; any balance beyond that is forfeited on December 31st unless local law requires otherwise."
+    },
+    {
+      "id": "q03",
+      "query": "How many days per week can an employee work remotely without needing special approval?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "employee_handbook", "content_marker": "up to 3 days per week without prior approval" }
+      ],
+      "reference_answer": "Up to 3 days per week, as long as the team's core collaboration hours (10 AM to 3 PM) are maintained."
+    },
+    {
+      "id": "q04",
+      "query": "What is the daily cap on meal expenses while traveling for business?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "employee_handbook", "content_marker": "capped at 75 dollars per day" }
+      ],
+      "reference_answer": "75 dollars per day, inclusive of tips."
+    },
+    {
+      "id": "q05",
+      "query": "Above what dollar amount does a business expense require an itemized receipt?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "employee_handbook", "content_marker": "any single expense over 25 dollars" }
+      ],
+      "reference_answer": "Any single expense over 25 dollars requires an original itemized receipt."
+    },
+    {
+      "id": "q06",
+      "query": "Does the company reimburse alcohol at client dinners?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "employee_handbook", "content_marker": "reimbursable only when directly related to client entertainment" }
+      ],
+      "reference_answer": "Yes, but only when directly related to client entertainment, and it must be itemized separately from the meal cost."
+    },
+    {
+      "id": "q07",
+      "query": "How quickly are harassment reports investigated?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "employee_handbook", "content_marker": "investigated within 10 business days" }
+      ],
+      "reference_answer": "Within 10 business days."
+    },
+    {
+      "id": "q08",
+      "query": "How many approvals does a pull request touching billing code need?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "engineering_practices", "content_marker": "require two approvals" }
+      ],
+      "reference_answer": "Two approvals, at least one from a senior engineer."
+    },
+    {
+      "id": "q09",
+      "query": "What's the recommended maximum size for a single pull request?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "engineering_practices", "content_marker": "kept under 400 changed lines" }
+      ],
+      "reference_answer": "Under 400 changed lines where practical; larger changes should be split into a stacked series of smaller pull requests."
+    },
+    {
+      "id": "q10",
+      "query": "How long must a new deployment's health check stay healthy before the deployment is considered complete?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "engineering_practices", "content_marker": "healthy for 5 consecutive minutes" }
+      ],
+      "reference_answer": "5 consecutive minutes; otherwise the pipeline automatically rolls back."
+    },
+    {
+      "id": "q11",
+      "query": "When are production deployments automatically paused during the week?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "engineering_practices", "content_marker": "paused automatically between 4:00 PM Friday" }
+      ],
+      "reference_answer": "Between 4:00 PM Friday and 8:00 AM Monday, except for emergency hotfixes signed off by the on-call engineering lead."
+    },
+    {
+      "id": "q12",
+      "query": "How quickly must the on-call engineer acknowledge a page during business hours?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "engineering_practices", "content_marker": "acknowledge a page within 15 minutes" }
+      ],
+      "reference_answer": "Within 15 minutes during business hours (30 minutes outside business hours)."
+    },
+    {
+      "id": "q13",
+      "query": "Do on-call engineers get any extra time off for carrying the pager?",
+      "category": "cross_document_discriminator",
+      "notes": "Both this section and the Employee Handbook's PTO section mention 'PTO' — this query tests whether retrieval finds the specific on-call compensation chunk rather than the general PTO-accrual chunk just because both mention the same term.",
+      "relevant_chunks": [
+        { "document_id": "engineering_practices", "content_marker": "compensated with an additional day of PTO" }
+      ],
+      "reference_answer": "Yes — each on-call week earns an additional day of PTO, credited the following month."
+    },
+    {
+      "id": "q14",
+      "query": "What is the full escalation and postmortem process for a Severity 1 incident?",
+      "category": "multi_chunk",
+      "relevant_chunks": [
+        { "document_id": "engineering_practices", "content_marker": "page the engineering lead within 5 minutes" },
+        { "document_id": "engineering_practices", "content_marker": "written postmortem within 5 business days" }
+      ],
+      "reference_answer": "The on-call engineer must open an incident channel and page the engineering lead within 5 minutes of detection. A written, blameless postmortem covering the timeline, root cause, customer impact, and follow-up action items is required within 5 business days of resolution."
+    },
+    {
+      "id": "q15",
+      "query": "If my payment fails, what happens before my account actually gets downgraded?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "product_faq", "content_marker": "three automatic retry attempts" }
+      ],
+      "reference_answer": "Three automatic retry attempts over 7 days, spaced 48 hours apart, before the account is downgraded to the free tier."
+    },
+    {
+      "id": "q16",
+      "query": "How many team members can the Professional plan have?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "product_faq", "content_marker": "up to 25 team members" }
+      ],
+      "reference_answer": "Up to 25 team members."
+    },
+    {
+      "id": "q17",
+      "query": "How long does a new account owner have to accept an ownership transfer before it expires?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        { "document_id": "product_faq", "content_marker": "accept the transfer within 7 days" }
+      ],
+      "reference_answer": "7 days from when the transfer is initiated."
+    },
+    {
+      "id": "q18",
+      "query": "What is the API rate limit for the Professional plan?",
+      "category": "single_chunk_pdf_page",
+      "notes": "Answerable only from page 3 of product_faq.pdf — exercises exact (not estimated) PDF page numbers.",
+      "relevant_chunks": [
+        { "document_id": "product_faq", "content_marker": "limited to 600 requests per minute" }
+      ],
+      "reference_answer": "600 requests per minute."
+    },
+    {
+      "id": "q19",
+      "query": "What HTTP status and header does the API return when a rate limit is exceeded?",
+      "category": "single_chunk_pdf_page",
+      "relevant_chunks": [
+        { "document_id": "product_faq", "content_marker": "429 response with a Retry-After header" }
+      ],
+      "reference_answer": "HTTP 429, with a Retry-After header indicating how many seconds to wait before retrying."
+    },
+    {
+      "id": "q20",
+      "query": "How long is data kept in backups after an account is deleted, and can it be restored during that time?",
+      "category": "multi_chunk",
+      "relevant_chunks": [
+        { "document_id": "product_faq", "content_marker": "retained in encrypted backups for 30 days" },
+        { "document_id": "product_faq", "content_marker": "restore an individual deleted document" }
+      ],
+      "reference_answer": "Data is retained in encrypted backups for 30 days after deletion. During that window, support can restore an individual document or the entire account on request; after 30 days the backup is permanently purged and recovery is no longer possible."
+    },
+    {
+      "id": "q21",
+      "query": "What is the company's policy on parental leave?",
+      "category": "out_of_corpus",
+      "notes": "Deliberately unanswerable from this corpus — used to check that the system declines rather than fabricates an answer.",
+      "relevant_chunks": [],
+      "reference_answer": null
+    }
+  ]
+}

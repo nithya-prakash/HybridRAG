@@ -1,0 +1,122 @@
+[project]
+name = "rag-backend"
+version = "0.1.0"
+description = "Multi-user RAG knowledge assistant API"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.6.0",
+    "structlog>=24.4.0",
+    "sqlalchemy>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "redis>=5.2.0",
+    "celery>=5.4.0",
+    "qdrant-client>=1.12.0,<1.13.0",
+    "openai>=1.55.0",
+    "python-jose[cryptography]>=3.3.0",
+    "bcrypt>=4.2.0",
+    "email-validator>=2.2.0",
+    "slowapi>=0.1.9",
+    "python-multipart>=0.0.17",
+    "pymupdf>=1.24.0",
+    "python-docx>=1.1.0",
+    "markdown-it-py>=3.0.0",
+    "tiktoken>=0.8.0",
+    "sentence-transformers>=3.3.0",
+    "torch>=2.0.0",
+    "prometheus-client>=0.21.0",
+    # Was dev-only (the test suite's ASGI transport); promoted to a real
+    # dependency once OllamaChatBackend started using it directly for the
+    # local chat provider's HTTP client.
+    "httpx>=0.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.7.0",
+    "pip-audit>=2.7.0",
+    "pytest-cov>=6.0.0",
+]
+
+[tool.uv]
+# This project only ever runs inside Linux containers — Docker locally, CI
+# runners, the shipped image — never natively on the host OS. Restricting the
+# lockfile to Linux (rather than uv's default of resolving something
+# installable on macOS/Windows too) is correct for that reason on its own,
+# and is also what lets the torch source override below actually take
+# effect: PyTorch's CPU-only wheel index doesn't publish macOS wheels, so a
+# cross-platform lock would refuse the override for lack of a macOS wheel
+# there and silently fall back to the CUDA-bundling default for every
+# platform, Linux included.
+environments = ["sys_platform == 'linux'"]
+
+[tool.uv.sources]
+# The reranker (sentence-transformers -> torch) has no GPU to use in any
+# environment this project runs in. The default PyPI torch wheel for Linux
+# bundles the full CUDA toolkit (many GB of nvidia-*/cuda-* packages)
+# regardless of a GPU being present, so pin torch to PyTorch's CPU-only wheel
+# index instead.
+torch = [{ index = "pytorch-cpu" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["alembic/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Cookie",
+    "fastapi.Header",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.File",
+    "fastapi.Form",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/alembic/*"]
+# SQLAlchemy's async ORM bridges to sync I/O via greenlet_spawn — without
+# this, coverage.py's tracer loses code executed across a greenlet switch,
+# which is most of this codebase's actual DB-touching code paths. Verified
+# directly: several branches with dedicated, passing tests (e.g.
+# AuthService.register's duplicate-email path) showed as "missed" without
+# this setting.
+concurrency = ["greenlet", "thread"]
+
+[tool.coverage.report]
+# Lines/branches that genuinely can't be exercised by an automated test in
+# this environment (e.g. a real OpenAI network failure) are marked with one
+# of these, not just left uncovered silently.
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "\\.\\.\\.",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

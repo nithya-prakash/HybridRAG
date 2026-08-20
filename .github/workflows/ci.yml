@@ -1,0 +1,263 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  backend:
+    name: Backend (lint + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rag -d rag"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:v1.12.1
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgresql+asyncpg://rag:rag@localhost:5432/rag
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+      QDRANT_URL: http://localhost:6333
+      JWT_SECRET_KEY: ci-test-secret-key
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.4"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Lint (ruff)
+        run: uv run ruff check .
+
+      - name: Dependency vulnerability scan (pip-audit)
+        # PYSEC-2026-1325 (ecdsa, pulled in transitively by python-jose) has
+        # no fix version available — a long-standing timing-side-channel
+        # advisory inherent to pure-Python ECDSA implementations. Unreachable
+        # here: this app signs JWTs with HS256 (pure HMAC) exclusively, never
+        # ECDSA — see ARCHITECTURE.md § Security posture for the full record
+        # of this exception. Ignored explicitly, not silently.
+        run: uv run pip-audit --ignore-vuln PYSEC-2026-1325
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        run: uv run pytest
+
+  eval:
+    name: RAG evaluation harness (manual)
+    # Not run on every push/PR: each real-mode run makes ~40 OpenAI calls
+    # (embeddings + generation + LLM-as-judge) across the labeled dataset,
+    # which is real cost and real latency for signal that doesn't change
+    # every commit. Triggered on demand from the Actions tab instead — see
+    # eval/RESULTS.md and docs/ARCHITECTURE.md § Evaluation methodology.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: rag
+          POSTGRES_PASSWORD: rag
+          POSTGRES_DB: rag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rag -d rag"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      qdrant:
+        image: qdrant/qdrant:v1.12.1
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgresql+asyncpg://rag:rag@localhost:5432/rag
+      QDRANT_URL: http://localhost:6333
+      JWT_SECRET_KEY: ci-eval-secret-key
+      # Optional: set an OPENAI_API_KEY repo/environment secret to run the
+      # harness in real mode (real embeddings, generation, and LLM-as-judge).
+      # Left unset, the harness runs its own deterministic synthetic
+      # fallback and still completes — see eval/run_eval.py's module
+      # docstring and eval/RESULTS.md for what each mode does and doesn't
+      # demonstrate.
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.5.4"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Run eval harness unit tests
+        run: uv run pytest ../eval/tests -v
+
+      - name: Run evaluation harness
+        run: uv run python ../eval/run_eval.py
+
+      - name: Upload eval report
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: eval/results/latest.json
+
+  frontend:
+    name: Frontend (lint + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Lint (eslint)
+        run: npm run lint
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Dependency vulnerability scan (npm audit)
+        # Gates only on critical, in production dependencies (--omit=dev) —
+        # there are 0 today. The full picture (3 high in production deps —
+        # next/sharp, unreachable in practice since this app never uses
+        # next/image — plus moderate/critical findings confined to dev-only
+        # build tooling like vitest/vite) is documented, not silently
+        # ignored: see ARCHITECTURE.md § Security posture. Clearing the
+        # high-severity findings requires a Next.js major-version bump,
+        # deliberately out of scope for a hardening pass with no feature
+        # testing budget attached.
+        run: npm audit --omit=dev --audit-level=critical
+
+      - name: Dependency vulnerability report (non-blocking)
+        run: npm audit || true
+
+  build-and-push:
+    name: Build and push Docker images
+    # Only after both lint+test+audit jobs pass, and only on main — a PR
+    # branch's images aren't meant to be deployable artifacts, just its code
+    # reviewed. This is the CI half of Phase 9's deploy story; the CD half
+    # (actually rolling these images out) is a documented manual step, not
+    # automated here — see README.md § Deployment for why.
+    needs: [backend, frontend]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/backend.Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/frontend.Dockerfile
+          push: true
+          # NEXT_PUBLIC_API_URL is baked into the client bundle at build
+          # time (Next.js NEXT_PUBLIC_* vars aren't runtime-configurable),
+          # so it has to be known here, not just on the deploy target. Set
+          # it as a repo/environment "Actions variable" (Settings > Secrets
+          # and variables > Actions > Variables) to your real backend URL;
+          # left unset, the image bakes in an empty API URL and the
+          # frontend won't be able to reach the backend until rebuilt.
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ vars.NEXT_PUBLIC_API_URL }}
+          tags: |
+            ghcr.io/${{ github.repository }}/frontend:latest
+            ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

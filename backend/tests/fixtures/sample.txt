@@ -1,0 +1,7 @@
+This is the first paragraph of a plain text file. It has no headings
+because plain text has no heading syntax.
+
+This is the second paragraph, continuing on a different point entirely.
+
+This is a third and final paragraph to make sure paragraph splitting works
+across more than two blocks.
