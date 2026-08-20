@@ -143,18 +143,23 @@ uv run python ../eval/run_eval.py   # full retrieval + generation evaluation rep
 
 ### Demo
 
-Terminal recording of the real retrieval evaluation running end to end:
+Terminal recording of the real evaluation harness running end to end:
 
-![Terminal recording of eval/run_eval.py running the real retrieval pipeline against a live Postgres and Qdrant, and printing the final Recall@K/MRR/NDCG report](docs/screenshots/eval_demo.gif)
+![Terminal recording of eval/run_eval.py running real local embeddings, real Ollama generation, and a real Ollama judge, printing the final Recall@K/MRR/NDCG and faithfulness/relevance report](docs/screenshots/eval_demo.gif)
 
-This is the actual, unedited terminal output of a real run against a live Postgres + Qdrant — every
-`retrieval_complete` line and every number in the final table is genuine, not staged (a handful of
-the 21 per-query log lines are shown for length; the full run logs all of them). No `OPENAI_API_KEY`
-was available in this environment, so embeddings/generation/judge fall back to the harness's
-documented synthetic mode — but the **retrieval pipeline itself (dense search, BM25, RRF fusion,
-and the local cross-encoder reranker) all ran for real**, which is what these Recall@K/MRR/NDCG
-numbers actually measure. See [`eval/RESULTS.md`](eval/RESULTS.md) for what that mode does and
-doesn't demonstrate, and rerun it yourself with a real key for real generation numbers too.
+This is genuine, unedited terminal output — every `retrieval_complete` line and every number in the
+final report is real, not staged. Unlike an earlier version of this recording, nothing here is
+synthetic: `EMBEDDING_PROVIDER=local` and `CHAT_PROVIDER=ollama` mean the dense embeddings, the
+generated answers, *and* the LLM-as-judge scoring all came from actually calling real local models —
+no API key, no lexical-overlap heuristic standing in for anything. It's a `--limit-queries 6`
+partial sample rather than the full 21-query labeled set (explained in
+[`eval/RESULTS.md`](eval/RESULTS.md) — this development machine's memory couldn't reliably sustain
+the full dataset's ~60 sequential CPU-bound Ollama calls), and the judge is the same small model
+doing the generating, both honestly labeled in the recording itself, not glossed over. See
+[`eval/RESULTS.md`](eval/RESULTS.md) for the full numbers, the partial-sample caveat, and a real
+JSON-parsing bug this exact run surfaced and fixed (a small local model's occasional malformed
+judge output was silently scoring genuinely correct answers as 0 — see § Update: a real local-mode
+run).
 
 The eval harness runs the real retrieval pipeline (dense-only, BM25-only, and fused+reranked) and
 real local cross-encoder reranker against a 21-query labeled dataset, reporting Recall@K, MRR, and
@@ -165,7 +170,10 @@ and don't demonstrate (including a real calibration bug the harness found and fi
 
 All of the above needs a real Postgres/Qdrant (and Redis, for the main test suite) — either the
 dev compose stack (`docker compose -f infra/docker-compose.yml up -d postgres redis qdrant`) or
-any equivalent. CI runs the identical sequence against ephemeral service containers on every push.
+any equivalent. The backend test suite (`ruff`, `pip-audit`, migrations, `pytest`) runs on every
+push against ephemeral service containers in CI; the eval harness job runs the identical sequence
+but only on demand (`workflow_dispatch` from the Actions tab), deliberately — see `.github/workflows/ci.yml`'s
+comment on that job for why.
 
 ## Design decisions
 

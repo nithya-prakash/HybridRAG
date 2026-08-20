@@ -44,20 +44,6 @@ for _p in (_REPO_ROOT, _REPO_ROOT / "backend"):
         sys.path.insert(0, str(_p))
 
 import httpx  # noqa: E402
-from eval.corpus import Corpus, EvalQuery, build_corpus, teardown_corpus  # noqa: E402
-from eval.fakes import (  # noqa: E402
-    FakeEmbeddingBackend,
-    PassthroughReranker,
-    SyntheticJudge,
-    synthetic_answer,
-)
-from eval.metrics.generation_metrics import Judge, score_faithfulness, score_relevance  # noqa: E402
-from eval.metrics.retrieval_metrics import (  # noqa: E402
-    mean_over_queries,
-    ndcg_at_k,
-    recall_at_k,
-    reciprocal_rank,
-)
 
 from app.core.chat import ChatBackend, OllamaChatBackend, OpenAIChatBackend  # noqa: E402
 from app.core.config import Settings, get_settings  # noqa: E402
@@ -78,6 +64,20 @@ from app.services.rag.prompts import (  # noqa: E402
 )
 from app.services.retrieval import RetrievalService  # noqa: E402
 from app.services.retrieval.models import RetrievedChunk  # noqa: E402
+from eval.corpus import Corpus, EvalQuery, build_corpus, teardown_corpus  # noqa: E402
+from eval.fakes import (  # noqa: E402
+    FakeEmbeddingBackend,
+    PassthroughReranker,
+    SyntheticJudge,
+    synthetic_answer,
+)
+from eval.metrics.generation_metrics import Judge, score_faithfulness, score_relevance  # noqa: E402
+from eval.metrics.retrieval_metrics import (  # noqa: E402
+    mean_over_queries,
+    ndcg_at_k,
+    recall_at_k,
+    reciprocal_rank,
+)
 
 RESULTS_DIR = Path(__file__).parent / "results"
 RECALL_KS = (3, 5)
@@ -294,6 +294,12 @@ def print_summary(report: dict) -> None:
             "   own output — a real, known limitation (shared blind spots), not a\n"
             "   synthetic-mode caveat. See eval/RESULTS.md."
         )
+    if meta["limit_queries"] is not None:
+        print(
+            f"⚠  --limit-queries {meta['limit_queries']} was set — this run only scored the "
+            f"first {meta['limit_queries']} of the labeled dataset's queries, not the full "
+            "set. Its numbers are a real but partial sample, not comparable to a full run."
+        )
     print(f"embedding backend : {meta['embedding_backend']}")
     print(f"chat backend      : {meta['chat_backend']}")
     print(f"judge backend     : {meta['judge_backend']}")
@@ -376,6 +382,8 @@ async def run(args: argparse.Namespace) -> dict:
 
     async with AsyncSessionLocal() as session:
         corpus = await build_corpus(session, vector_store, embedding_backend)
+        if args.limit_queries is not None:
+            corpus.queries = corpus.queries[: args.limit_queries]
         if corpus.unresolved_markers:
             print(
                 "ERROR: the following eval dataset content_markers did not match any indexed "
@@ -439,6 +447,7 @@ async def run(args: argparse.Namespace) -> dict:
                         1 for q in corpus.queries if q.relevant_chunk_ids
                     ),
                     "retrieval_only": args.retrieval_only,
+                    "limit_queries": args.limit_queries,
                 },
                 "retrieval": retrieval_metrics,
                 "generation": (
@@ -464,6 +473,20 @@ def main() -> None:
         "--retrieval-only",
         action="store_true",
         help="skip generation/judge scoring (faster, no LLM calls)",
+    )
+    parser.add_argument(
+        "--limit-queries",
+        type=int,
+        default=None,
+        help=(
+            "only run the first N labeled queries (in dataset order) instead of all of "
+            "them — every document is still fully indexed either way, only the "
+            "generation/judge call count drops. Useful for a real (not synthetic) "
+            "local-mode run on constrained hardware, where the full dataset's ~60 "
+            "sequential CPU-bound Ollama calls can take an hour-plus; a report built "
+            "this way is a genuine but partial sample, not the full labeled set — its "
+            "retrieval/generation numbers are not comparable to a full run's."
+        ),
     )
     parser.add_argument(
         "--output",

@@ -58,6 +58,20 @@ async def test_score_extracts_json_even_with_surrounding_prose():
     assert result.score == 1.0
 
 
+async def test_score_tolerates_a_stray_trailing_brace():
+    # A real failure mode observed from llama3.2:3b in "local" mode (see
+    # run_eval.py): a well-formed object followed by one extra closing
+    # brace. A greedy first-`{`-to-last-`}` regex would swallow that stray
+    # brace into the match and fail to parse a genuinely valid 5/5 judgment.
+    judge = _StubJudge('{"score": 5, "rationale": "fully grounded"}}')
+
+    result = await score_faithfulness(judge, "q?", "ctx", "ans")
+
+    assert result.parse_ok is True
+    assert result.raw_score == 5
+    assert result.score == 1.0
+
+
 async def test_score_falls_back_gracefully_on_unparseable_output():
     judge = _StubJudge("I refuse to answer in JSON.")
 

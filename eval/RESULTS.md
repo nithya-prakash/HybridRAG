@@ -28,16 +28,87 @@ its synthetic fallback (see `eval/run_eval.py::detect_mode` and
 **Bottom line: the retrieval numbers below are meaningfully real for BM25
 and reranking, and a lower-bound/pessimistic proxy for dense retrieval. The
 generation numbers (faithfulness/relevance) are mechanics validation only —
-they exercise the harness's plumbing, not real system quality.** To get real
-generation numbers, set `OPENAI_API_KEY` in `backend/.env` (or as a CI
-secret for the `eval` GitHub Actions job) and rerun; no code changes are
-needed, the harness switches backends automatically.
+they exercise the harness's plumbing, not real system quality.** Real
+generation numbers no longer require a paid key — see the local-mode run
+below — or set `OPENAI_API_KEY` in `backend/.env` for real OpenAI-mode
+numbers instead; no code changes are needed either way, the harness switches
+backends automatically based on `EMBEDDING_PROVIDER`/`CHAT_PROVIDER`.
 
 To reproduce, from `backend/`:
 
 ```bash
 uv run python ../eval/run_eval.py
 ```
+
+## Update: a real local-mode run (partial sample)
+
+**Run:** 2026-08-20T17:36:13Z · mode: **LOCAL** · `--limit-queries 6` (the
+first 6 of the 21 labeled queries — see § Why a partial sample below) · real
+local embeddings (`BAAI/bge-small-en-v1.5`), real Ollama generation
+(`llama3.2:3b`), real Ollama judge (same model).
+
+| Variant | Recall@3 | Recall@5 | MRR | NDCG@5 |
+|---|---|---|---|---|
+| Dense only (real local embeddings) | 1.000 | 1.000 | 1.000 | 1.000 |
+| BM25 only (real) | 1.000 | 1.000 | 0.917 | 0.939 |
+| Hybrid (RRF) + reranked (real reranker) | 1.000 | 1.000 | 1.000 | 1.000 |
+
+| Metric | Value (6 queries, all answered) |
+|---|---|
+| Faithfulness | 0.833 |
+| Relevance | 0.875 |
+| Abstention correct | 6/6 |
+
+**This is the first genuinely real (not synthetic, not requiring a paid API
+key) generation run this project has produced.** Every number above came
+from actually calling a local model — no lexical-overlap heuristics standing
+in for anything.
+
+**A real bug this run found, not a pre-existing known issue:** the first
+attempt at this run scored faithfulness at 0.583, noticeably lower than the
+0.833 above for the *identical* 6 queries. Two of the six judge calls came
+back scored 0.0 despite their own embedded rationale text plainly reading
+`"score": 5` — `eval/metrics/generation_metrics.py::_parse_judge_response`
+was extracting JSON with a greedy regex spanning the first `{` to the *last*
+`}` in the response, and `llama3.2:3b` was occasionally emitting one stray
+extra closing brace after an otherwise well-formed object
+(`{"score": 5, "rationale": "..."}}`) — the regex swallowed that trailing
+brace into the match, produced invalid JSON, and silently fell back to a
+hard 0.0 rather than the judge's real, well-formed 5/5. Fixed by replacing
+the regex with a proper bracket-depth-counting extractor that stops at the
+*first* balanced `{...}`, tolerant of trailing garbage regardless of its
+shape — covered by a new regression test
+(`test_score_tolerates_a_stray_trailing_brace`) using this exact malformed
+shape. This is exactly the kind of thing running the harness for real,
+rather than trusting synthetic-mode numbers indefinitely, surfaces.
+
+**Why a partial sample, not all 21 queries:** `llama3.2:3b` on CPU is slow
+enough (each call took 10–90s in this environment) that the full dataset's
+~60 sequential real calls (generation + 2 judge calls × 21 queries) pushed
+this development machine's Docker memory budget hard enough to repeatedly
+OOM-kill the Ollama model runner mid-run, even after freeing memory and
+tuning Ollama's context/cache settings down. Rather than report a number
+from a run that kept crashing, `--limit-queries N` (added to `run_eval.py`
+for exactly this) runs a real, complete, honestly-labeled subset instead —
+6 queries here, all `single_chunk` category. **These numbers are not
+comparable to the 21-query synthetic-mode run above** (different sample,
+different size) and are more likely to be lucky/unlucky than the full-dataset
+numbers would be — treat this as "the local pipeline demonstrably works for
+real, on real content" evidence, not a calibrated quality benchmark. A
+machine with more headroom (or a smaller/quantized model) could run the full
+21 for a real, complete local-mode report:
+
+```bash
+uv run python ../eval/run_eval.py            # full 21, needs real headroom
+uv run python ../eval/run_eval.py --limit-queries 6   # a fast, real partial sample
+```
+
+**The judge grading its own generation is a real, known limitation of this
+particular run** (not a synthetic-mode artifact) — `llama3.2:3b` judges
+`llama3.2:3b`'s own answers, which can share blind spots a truly independent
+judge wouldn't. Treat 0.833/0.875 as "plausible and directionally
+meaningful," not as rigorous as an OpenAI-mode run using a stronger,
+independent judge model would be.
 
 ## Retrieval: Recall@K, MRR, NDCG@5
 

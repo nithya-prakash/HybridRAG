@@ -39,11 +39,8 @@ object the caller constructs.
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass
 from typing import Protocol
-
-_JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
 FAITHFULNESS_RUBRIC = """You are grading whether an AI-generated answer stays grounded in a \
 provided context, on a 1-5 scale:
@@ -103,12 +100,51 @@ def _unparseable(raw: str) -> JudgeScore:
     )
 
 
+def _extract_first_json_object(raw: str) -> str | None:
+    """Finds the first balanced `{...}` substring by bracket-depth counting
+    (string- and escape-aware), rather than a single greedy regex spanning
+    the first `{` to the *last* `}` in the whole response. That distinction
+    is not theoretical: a smaller local judge model (llama3.2:3b, used in
+    "local" mode — see run_eval.py) was observed emitting a stray extra
+    closing brace after an otherwise well-formed object, e.g.
+    `{"score": 5, "rationale": "..."}}"` — a greedy regex swallows that
+    trailing `}` into the match, producing invalid JSON and silently
+    mis-scoring a genuinely well-formed 5/5 judgment as unparseable (score
+    0.0). Stopping at the first balanced close is correct for that case and
+    for the more common one (leading prose before the object) alike."""
+    start = raw.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(raw)):
+        ch = raw[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return raw[start : i + 1]
+    return None
+
+
 def _parse_judge_response(raw: str) -> JudgeScore:
-    match = _JSON_BLOCK.search(raw)
-    if match is None:
+    candidate = _extract_first_json_object(raw)
+    if candidate is None:
         return _unparseable(raw)
     try:
-        payload = json.loads(match.group(0))
+        payload = json.loads(candidate)
         raw_score = int(payload["score"])
         rationale = str(payload.get("rationale", ""))
     except (json.JSONDecodeError, KeyError, TypeError, ValueError):
