@@ -32,6 +32,11 @@ frontend/*.tsbuildinfo
 # Data
 data/
 
+# Unrelated project checkout that happens to live in this directory —
+# never part of this repo (it carries its own .git, which is exactly what
+# makes an unguarded `git add .` commit it as a broken submodule reference).
+/Decision-Support-System-for-Knowledge-Retrieval-RAG-Based-/
+
 # Eval reports are generated per-run and depend on which backend mode
 # produced them (real vs. synthetic) — eval/RESULTS.md documents the
 # current figures instead of committing raw report dumps.
