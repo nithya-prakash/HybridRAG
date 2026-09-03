@@ -1,6 +1,7 @@
 from eval.metrics.retrieval_metrics import (
     mean_over_queries,
     ndcg_at_k,
+    precision_at_k,
     recall_at_k,
     reciprocal_rank,
 )
@@ -57,6 +58,28 @@ def test_ndcg_at_k_ideal_denominator_is_capped_by_k_not_by_relevant_set_size():
     # 3 relevant items exist, but k=1 means only the ideal top-1 is achievable
     # even in the best possible ranking -> a single top-ranked hit is perfect.
     assert ndcg_at_k(["a", "x", "y"], {"a", "b", "c"}, k=1) == 1.0
+
+
+def test_precision_at_k_counts_hits_within_k_over_k():
+    retrieved = ["a", "b", "c", "d"]
+    relevant = {"a", "c", "z"}
+
+    assert precision_at_k(retrieved, relevant, k=2) == 0.5
+    assert precision_at_k(retrieved, relevant, k=4) == 0.5
+
+
+def test_precision_at_k_divides_by_actual_results_when_fewer_than_k():
+    # Only 2 results exist even though k=5 was requested — precision is over
+    # what was actually returned, not artificially padded to k.
+    assert precision_at_k(["a", "b"], {"a", "z"}, k=5) == 0.5
+
+
+def test_precision_at_k_is_undefined_for_empty_relevant_set():
+    assert precision_at_k(["a", "b"], set(), k=2) is None
+
+
+def test_precision_at_k_is_zero_for_empty_retrieved_list():
+    assert precision_at_k([], {"a"}, k=5) == 0.0
 
 
 def test_mean_over_queries_skips_none_values_and_reports_included_count():

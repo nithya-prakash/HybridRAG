@@ -1,5 +1,5 @@
 {
-  "description": "A small synthetic company knowledge base (employee handbook, engineering practices, product FAQ) used to evaluate the retrieval and generation pipelines end to end. Queries are hand-crafted to cover single-chunk lookups, multi-chunk answers, cross-document topical discrimination (e.g. two different kinds of \"PTO\"), a PDF with real (not estimated) page numbers, and one deliberately out-of-corpus question.",
+  "description": "A small synthetic company knowledge base (employee handbook, engineering practices, product FAQ) used to evaluate the retrieval and generation pipelines end to end. Queries are hand-crafted to cover single-chunk lookups, multi-chunk answers, cross-document topical discrimination (e.g. two different kinds of \"PTO\"), a PDF with real (not estimated) page numbers, and one deliberately out-of-corpus question. Extended with 5 additional synthetic fixture documents (security policy, incident response runbook, customer success playbook, enterprise admin console FAQ, compensation & benefits guide) to support a genuinely larger, non-redundant labeled question set \u2014 see eval/RESULTS.md for why the corpus was grown rather than padding question count against the original 3 documents.",
   "documents": [
     {
       "id": "employee_handbook",
@@ -15,6 +15,31 @@
       "id": "product_faq",
       "path": "documents/product_faq.pdf",
       "file_type": "pdf"
+    },
+    {
+      "id": "security_policy",
+      "path": "documents/security_policy.md",
+      "file_type": "md"
+    },
+    {
+      "id": "incident_response_runbook",
+      "path": "documents/incident_response_runbook.md",
+      "file_type": "md"
+    },
+    {
+      "id": "customer_success_playbook",
+      "path": "documents/customer_success_playbook.md",
+      "file_type": "md"
+    },
+    {
+      "id": "enterprise_console_faq",
+      "path": "documents/enterprise_console_faq.md",
+      "file_type": "md"
+    },
+    {
+      "id": "compensation_and_benefits",
+      "path": "documents/compensation_and_benefits.md",
+      "file_type": "md"
     }
   ],
   "queries": [
@@ -23,192 +48,1436 @@
       "query": "How many days of PTO do full-time employees accrue each year?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "employee_handbook", "content_marker": "15 days of paid time off" }
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "15 days of paid time off"
+        }
       ],
-      "reference_answer": "Full-time employees accrue 15 days of PTO per year, at a rate of 1.25 days per completed month, though accrual doesn't begin until after the 90-day probationary period."
+      "reference_answer": "Full-time employees accrue 15 days of PTO per year, at a rate of 1.25 days per completed month, though accrual doesn't begin until after the 90-day probationary period.",
+      "answerable": true
     },
     {
       "id": "q02",
       "query": "Can unused PTO be carried over to the next year, and if so how much?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "employee_handbook", "content_marker": "carries over into the following year up to a maximum of 5 days" }
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "carries over into the following year up to a maximum of 5 days"
+        }
       ],
-      "reference_answer": "Yes, up to 5 days of unused PTO carry over into the next year; any balance beyond that is forfeited on December 31st unless local law requires otherwise."
+      "reference_answer": "Yes, up to 5 days of unused PTO carry over into the next year; any balance beyond that is forfeited on December 31st unless local law requires otherwise.",
+      "answerable": true
     },
     {
       "id": "q03",
       "query": "How many days per week can an employee work remotely without needing special approval?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "employee_handbook", "content_marker": "up to 3 days per week without prior approval" }
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "up to 3 days per week without prior approval"
+        }
       ],
-      "reference_answer": "Up to 3 days per week, as long as the team's core collaboration hours (10 AM to 3 PM) are maintained."
+      "reference_answer": "Up to 3 days per week, as long as the team's core collaboration hours (10 AM to 3 PM) are maintained.",
+      "answerable": true
     },
     {
       "id": "q04",
       "query": "What is the daily cap on meal expenses while traveling for business?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "employee_handbook", "content_marker": "capped at 75 dollars per day" }
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "capped at 75 dollars per day"
+        }
       ],
-      "reference_answer": "75 dollars per day, inclusive of tips."
+      "reference_answer": "75 dollars per day, inclusive of tips.",
+      "answerable": true
     },
     {
       "id": "q05",
       "query": "Above what dollar amount does a business expense require an itemized receipt?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "employee_handbook", "content_marker": "any single expense over 25 dollars" }
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "any single expense over 25 dollars"
+        }
       ],
-      "reference_answer": "Any single expense over 25 dollars requires an original itemized receipt."
+      "reference_answer": "Any single expense over 25 dollars requires an original itemized receipt.",
+      "answerable": true
     },
     {
       "id": "q06",
       "query": "Does the company reimburse alcohol at client dinners?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "employee_handbook", "content_marker": "reimbursable only when directly related to client entertainment" }
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "reimbursable only when directly related to client entertainment"
+        }
       ],
-      "reference_answer": "Yes, but only when directly related to client entertainment, and it must be itemized separately from the meal cost."
+      "reference_answer": "Yes, but only when directly related to client entertainment, and it must be itemized separately from the meal cost.",
+      "answerable": true
     },
     {
       "id": "q07",
       "query": "How quickly are harassment reports investigated?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "employee_handbook", "content_marker": "investigated within 10 business days" }
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "investigated within 10 business days"
+        }
       ],
-      "reference_answer": "Within 10 business days."
+      "reference_answer": "Within 10 business days.",
+      "answerable": true
     },
     {
       "id": "q08",
       "query": "How many approvals does a pull request touching billing code need?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "engineering_practices", "content_marker": "require two approvals" }
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "require two approvals"
+        }
       ],
-      "reference_answer": "Two approvals, at least one from a senior engineer."
+      "reference_answer": "Two approvals, at least one from a senior engineer.",
+      "answerable": true
     },
     {
       "id": "q09",
       "query": "What's the recommended maximum size for a single pull request?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "engineering_practices", "content_marker": "kept under 400 changed lines" }
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "kept under 400 changed lines"
+        }
       ],
-      "reference_answer": "Under 400 changed lines where practical; larger changes should be split into a stacked series of smaller pull requests."
+      "reference_answer": "Under 400 changed lines where practical; larger changes should be split into a stacked series of smaller pull requests.",
+      "answerable": true
     },
     {
       "id": "q10",
       "query": "How long must a new deployment's health check stay healthy before the deployment is considered complete?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "engineering_practices", "content_marker": "healthy for 5 consecutive minutes" }
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "healthy for 5 consecutive minutes"
+        }
       ],
-      "reference_answer": "5 consecutive minutes; otherwise the pipeline automatically rolls back."
+      "reference_answer": "5 consecutive minutes; otherwise the pipeline automatically rolls back.",
+      "answerable": true
     },
     {
       "id": "q11",
       "query": "When are production deployments automatically paused during the week?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "engineering_practices", "content_marker": "paused automatically between 4:00 PM Friday" }
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "paused automatically between 4:00 PM Friday"
+        }
       ],
-      "reference_answer": "Between 4:00 PM Friday and 8:00 AM Monday, except for emergency hotfixes signed off by the on-call engineering lead."
+      "reference_answer": "Between 4:00 PM Friday and 8:00 AM Monday, except for emergency hotfixes signed off by the on-call engineering lead.",
+      "answerable": true
     },
     {
       "id": "q12",
       "query": "How quickly must the on-call engineer acknowledge a page during business hours?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "engineering_practices", "content_marker": "acknowledge a page within 15 minutes" }
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "acknowledge a page within 15 minutes"
+        }
       ],
-      "reference_answer": "Within 15 minutes during business hours (30 minutes outside business hours)."
+      "reference_answer": "Within 15 minutes during business hours (30 minutes outside business hours).",
+      "answerable": true
     },
     {
       "id": "q13",
       "query": "Do on-call engineers get any extra time off for carrying the pager?",
       "category": "cross_document_discriminator",
-      "notes": "Both this section and the Employee Handbook's PTO section mention 'PTO' — this query tests whether retrieval finds the specific on-call compensation chunk rather than the general PTO-accrual chunk just because both mention the same term.",
+      "notes": "Both this section and the Employee Handbook's PTO section mention 'PTO' \u2014 this query tests whether retrieval finds the specific on-call compensation chunk rather than the general PTO-accrual chunk just because both mention the same term.",
       "relevant_chunks": [
-        { "document_id": "engineering_practices", "content_marker": "compensated with an additional day of PTO" }
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "compensated with an additional day of PTO"
+        }
       ],
-      "reference_answer": "Yes — each on-call week earns an additional day of PTO, credited the following month."
+      "reference_answer": "Yes \u2014 each on-call week earns an additional day of PTO, credited the following month.",
+      "answerable": true
     },
     {
       "id": "q14",
       "query": "What is the full escalation and postmortem process for a Severity 1 incident?",
       "category": "multi_chunk",
       "relevant_chunks": [
-        { "document_id": "engineering_practices", "content_marker": "page the engineering lead within 5 minutes" },
-        { "document_id": "engineering_practices", "content_marker": "written postmortem within 5 business days" }
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "page the engineering lead within 5 minutes"
+        },
+        {
+          "document_id": "engineering_practices",
+          "content_marker": "written postmortem within 5 business days"
+        }
       ],
-      "reference_answer": "The on-call engineer must open an incident channel and page the engineering lead within 5 minutes of detection. A written, blameless postmortem covering the timeline, root cause, customer impact, and follow-up action items is required within 5 business days of resolution."
+      "reference_answer": "The on-call engineer must open an incident channel and page the engineering lead within 5 minutes of detection. A written, blameless postmortem covering the timeline, root cause, customer impact, and follow-up action items is required within 5 business days of resolution.",
+      "answerable": true
     },
     {
       "id": "q15",
       "query": "If my payment fails, what happens before my account actually gets downgraded?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "product_faq", "content_marker": "three automatic retry attempts" }
+        {
+          "document_id": "product_faq",
+          "content_marker": "three automatic retry attempts"
+        }
       ],
-      "reference_answer": "Three automatic retry attempts over 7 days, spaced 48 hours apart, before the account is downgraded to the free tier."
+      "reference_answer": "Three automatic retry attempts over 7 days, spaced 48 hours apart, before the account is downgraded to the free tier.",
+      "answerable": true
     },
     {
       "id": "q16",
       "query": "How many team members can the Professional plan have?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "product_faq", "content_marker": "up to 25 team members" }
+        {
+          "document_id": "product_faq",
+          "content_marker": "up to 25 team members"
+        }
       ],
-      "reference_answer": "Up to 25 team members."
+      "reference_answer": "Up to 25 team members.",
+      "answerable": true
     },
     {
       "id": "q17",
       "query": "How long does a new account owner have to accept an ownership transfer before it expires?",
       "category": "single_chunk",
       "relevant_chunks": [
-        { "document_id": "product_faq", "content_marker": "accept the transfer within 7 days" }
+        {
+          "document_id": "product_faq",
+          "content_marker": "accept the transfer within 7 days"
+        }
       ],
-      "reference_answer": "7 days from when the transfer is initiated."
+      "reference_answer": "7 days from when the transfer is initiated.",
+      "answerable": true
     },
     {
       "id": "q18",
       "query": "What is the API rate limit for the Professional plan?",
       "category": "single_chunk_pdf_page",
-      "notes": "Answerable only from page 3 of product_faq.pdf — exercises exact (not estimated) PDF page numbers.",
+      "notes": "Answerable only from page 3 of product_faq.pdf \u2014 exercises exact (not estimated) PDF page numbers.",
       "relevant_chunks": [
-        { "document_id": "product_faq", "content_marker": "limited to 600 requests per minute" }
+        {
+          "document_id": "product_faq",
+          "content_marker": "limited to 600 requests per minute"
+        }
       ],
-      "reference_answer": "600 requests per minute."
+      "reference_answer": "600 requests per minute.",
+      "answerable": true
     },
     {
       "id": "q19",
       "query": "What HTTP status and header does the API return when a rate limit is exceeded?",
       "category": "single_chunk_pdf_page",
       "relevant_chunks": [
-        { "document_id": "product_faq", "content_marker": "429 response with a Retry-After header" }
+        {
+          "document_id": "product_faq",
+          "content_marker": "429 response with a Retry-After header"
+        }
       ],
-      "reference_answer": "HTTP 429, with a Retry-After header indicating how many seconds to wait before retrying."
+      "reference_answer": "HTTP 429, with a Retry-After header indicating how many seconds to wait before retrying.",
+      "answerable": true
     },
     {
       "id": "q20",
       "query": "How long is data kept in backups after an account is deleted, and can it be restored during that time?",
       "category": "multi_chunk",
       "relevant_chunks": [
-        { "document_id": "product_faq", "content_marker": "retained in encrypted backups for 30 days" },
-        { "document_id": "product_faq", "content_marker": "restore an individual deleted document" }
+        {
+          "document_id": "product_faq",
+          "content_marker": "retained in encrypted backups for 30 days"
+        },
+        {
+          "document_id": "product_faq",
+          "content_marker": "restore an individual deleted document"
+        }
       ],
-      "reference_answer": "Data is retained in encrypted backups for 30 days after deletion. During that window, support can restore an individual document or the entire account on request; after 30 days the backup is permanently purged and recovery is no longer possible."
+      "reference_answer": "Data is retained in encrypted backups for 30 days after deletion. During that window, support can restore an individual document or the entire account on request; after 30 days the backup is permanently purged and recovery is no longer possible.",
+      "answerable": true
     },
     {
       "id": "q21",
       "query": "What is the company's policy on parental leave?",
       "category": "out_of_corpus",
-      "notes": "Deliberately unanswerable from this corpus — used to check that the system declines rather than fabricates an answer.",
+      "notes": "Deliberately unanswerable from this corpus \u2014 used to check that the system declines rather than fabricates an answer.",
       "relevant_chunks": [],
-      "reference_answer": null
+      "reference_answer": null,
+      "answerable": false
+    },
+    {
+      "id": "q022",
+      "query": "What is the minimum password length required for employee accounts?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "minimum password length of 14 characters"
+        }
+      ],
+      "reference_answer": "Employee account passwords must be at least 14 characters long.",
+      "answerable": true
+    },
+    {
+      "id": "q023",
+      "query": "Is SMS-based multi-factor authentication allowed for production access?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "SMS-based\nMFA is not permitted for these accounts"
+        }
+      ],
+      "reference_answer": "No \u2014 SMS-based MFA is not permitted for accounts with access to production systems, customer data, or financial systems; only authenticator-app or hardware-key methods are allowed.",
+      "answerable": true
+    },
+    {
+      "id": "q024",
+      "query": "How often are encryption keys rotated?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "Encryption keys are rotated every 90 days"
+        }
+      ],
+      "reference_answer": "Encryption keys are rotated every 90 days.",
+      "answerable": true
+    },
+    {
+      "id": "q025",
+      "query": "What TLS version is required for data in transit between services?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "must use TLS 1.2 or higher"
+        }
+      ],
+      "reference_answer": "TLS 1.2 or higher; TLS 1.0 and 1.1 are disabled on all production load balancers.",
+      "answerable": true
+    },
+    {
+      "id": "q026",
+      "query": "How quickly must a suspected security incident be reported?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "reported to\nthe Security team within 1 hour of discovery"
+        }
+      ],
+      "reference_answer": "Within 1 hour of discovery.",
+      "answerable": true
+    },
+    {
+      "id": "q027",
+      "query": "How long after an employee leaves the company is their system access revoked?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "all system access is revoked within 4\nhours"
+        }
+      ],
+      "reference_answer": "All system access is revoked within 4 hours of offboarding being processed by HR.",
+      "answerable": true
+    },
+    {
+      "id": "q028",
+      "query": "What happens to unused access grants during a quarterly access review?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "Any access grant that has not been used in the preceding\n60 days is automatically revoked"
+        }
+      ],
+      "reference_answer": "Any access grant not used in the preceding 60 days is automatically revoked during the quarterly review.",
+      "answerable": true
+    },
+    {
+      "id": "q029",
+      "query": "Does a vendor security review need to be repeated, and how often?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "Vendor security reviews are valid for 12 months"
+        }
+      ],
+      "reference_answer": "Yes \u2014 vendor security reviews are valid for 12 months, after which the vendor must be re-reviewed before contract renewal.",
+      "answerable": true
+    },
+    {
+      "id": "q030",
+      "query": "What is required to access the server room?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "requires two-factor physical access (badge plus\nPIN)"
+        }
+      ],
+      "reference_answer": "Server room access requires two-factor physical access: badge plus PIN, and is limited to the Infrastructure team.",
+      "answerable": true
+    },
+    {
+      "id": "q031",
+      "query": "What should an employee do if they click a phishing email?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "using the #security-incidents\nchannel or the security hotline for after-hours reporting"
+        }
+      ],
+      "reference_answer": "Report it to the Security team within 1 hour using the #security-incidents channel, or the security hotline after hours.",
+      "answerable": true
+    },
+    {
+      "id": "q032",
+      "query": "What is the process for onboarding a new vendor that will handle Restricted data?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "an annual SOC 2 Type II report review before a contract is signed"
+        }
+      ],
+      "reference_answer": "The vendor must complete a security questionnaire and, for Restricted data, pass an annual SOC 2 Type II report review before the contract is signed.",
+      "answerable": true
+    },
+    {
+      "id": "q033",
+      "query": "Will I get in trouble for flagging something that turns out to be a non-issue?",
+      "category": "terminology_mismatch",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "never subject to disciplinary\naction for the report itself, even if the concern turns out to be a false\nalarm"
+        }
+      ],
+      "reference_answer": "No \u2014 employees who report a security concern in good faith are never subject to disciplinary action, even if it turns out to be a false alarm.",
+      "answerable": true
+    },
+    {
+      "id": "q034",
+      "query": "Can I keep customer PII on my personal laptop temporarily?",
+      "category": "terminology_mismatch",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "must never be copied to a personal device"
+        }
+      ],
+      "reference_answer": "No \u2014 Restricted data such as customer PII must never be copied to a personal device.",
+      "answerable": true
+    },
+    {
+      "id": "q035",
+      "query": "What defines a Severity 1 incident?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "the product is completely unavailable for all customers, or customer data has\nbeen exposed"
+        }
+      ],
+      "reference_answer": "A Sev1 is when the product is completely unavailable for all customers, or customer data has been exposed.",
+      "answerable": true
+    },
+    {
+      "id": "q036",
+      "query": "Who is responsible for posting status page updates during an incident?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "Communications\nLead, who is solely responsible for posting status page updates"
+        }
+      ],
+      "reference_answer": "The Communications Lead is solely responsible for status page updates and customer-facing communication.",
+      "answerable": true
+    },
+    {
+      "id": "q037",
+      "query": "How quickly must an Incident Commander be assigned for a Sev1?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "The Incident Commander must be assigned within 10 minutes of a Sev1 being\ndeclared"
+        }
+      ],
+      "reference_answer": "Within 10 minutes of the Sev1 being declared.",
+      "answerable": true
+    },
+    {
+      "id": "q038",
+      "query": "How frequently must status page updates be posted during a Sev1?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "must be posted at least every 30 minutes\nuntil resolution"
+        }
+      ],
+      "reference_answer": "At least every 30 minutes until resolution.",
+      "answerable": true
+    },
+    {
+      "id": "q039",
+      "query": "When should a deployment suspected of causing a Sev1 be rolled back relative to root-causing the issue?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "must be rolled back\nimmediately, before root-causing the issue"
+        }
+      ],
+      "reference_answer": "It must be rolled back immediately, before root-causing the issue, unless the IC determines rolling back would make things worse.",
+      "answerable": true
+    },
+    {
+      "id": "q040",
+      "query": "How is a rollback confirmed to be complete?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "once the previous version's health checks have been green for\n5 consecutive minutes"
+        }
+      ],
+      "reference_answer": "A rollback is complete once the previous version's health checks have been green for 5 consecutive minutes.",
+      "answerable": true
+    },
+    {
+      "id": "q041",
+      "query": "How soon after a Sev1 is resolved must a postmortem be written?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "requires a written postmortem within 3 business days of\nresolution"
+        }
+      ],
+      "reference_answer": "Within 3 business days of resolution.",
+      "answerable": true
+    },
+    {
+      "id": "q042",
+      "query": "What must every incident postmortem include?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "at least one concrete follow-up action\nwith an assigned owner and due date"
+        }
+      ],
+      "reference_answer": "A timeline, root cause, concrete customer impact, and at least one follow-up action with an assigned owner and due date.",
+      "answerable": true
+    },
+    {
+      "id": "q043",
+      "query": "What happens if the primary on-call engineer doesn't acknowledge a page within 10 minutes?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "the page automatically escalates to the secondary on-call engineer"
+        }
+      ],
+      "reference_answer": "The page automatically escalates to the secondary on-call engineer.",
+      "answerable": true
+    },
+    {
+      "id": "q044",
+      "query": "How often does each team run a chaos testing exercise?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "at least once per quarter"
+        }
+      ],
+      "reference_answer": "At least once per quarter.",
+      "answerable": true
+    },
+    {
+      "id": "q045",
+      "query": "When does an on-call rotation shift hand off?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "handed off every Monday at 10:00 AM"
+        }
+      ],
+      "reference_answer": "Every Monday at 10:00 AM in the team's primary time zone.",
+      "answerable": true
+    },
+    {
+      "id": "q046",
+      "query": "Does the final status page update need to include technical root-cause detail?",
+      "category": "terminology_mismatch",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "root cause detail belongs in the postmortem, not the status page"
+        }
+      ],
+      "reference_answer": "No \u2014 the final update needs a non-technical summary and confirmation of resolution; root cause detail belongs in the postmortem.",
+      "answerable": true
+    },
+    {
+      "id": "q047",
+      "query": "How long is the standard onboarding period for new Professional and Enterprise customers?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "The standard onboarding period is 30 days"
+        }
+      ],
+      "reference_answer": "30 days.",
+      "answerable": true
+    },
+    {
+      "id": "q048",
+      "query": "Do Starter plan customers get a dedicated Customer Success Manager?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "Starter plan customers do not receive a dedicated CSM"
+        }
+      ],
+      "reference_answer": "No \u2014 Starter plan customers do not receive a dedicated CSM, only self-serve guides and email support.",
+      "answerable": true
+    },
+    {
+      "id": "q049",
+      "query": "What is the first-response SLA for urgent issues on the Enterprise plan?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "guaranteed a first response within 1 hour for\nissues marked urgent"
+        }
+      ],
+      "reference_answer": "1 hour, 24 hours a day, 7 days a week.",
+      "answerable": true
+    },
+    {
+      "id": "q050",
+      "query": "How much notice is required to cancel a standard annual contract before it auto-renews?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "at least 30 days before the renewal date"
+        }
+      ],
+      "reference_answer": "At least 30 days' written notice before the renewal date.",
+      "answerable": true
+    },
+    {
+      "id": "q051",
+      "query": "How much notice is required for Enterprise contracts longer than one year?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "require 60 days' written notice"
+        }
+      ],
+      "reference_answer": "60 days' written notice.",
+      "answerable": true
+    },
+    {
+      "id": "q052",
+      "query": "At what health score is a customer account automatically flagged as at-risk?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "drops below 40 is automatically flagged"
+        }
+      ],
+      "reference_answer": "A health score below 40.",
+      "answerable": true
+    },
+    {
+      "id": "q053",
+      "query": "How many administrators can an Enterprise customer enroll in the certification program per year?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "enroll up to 5 administrators per year"
+        }
+      ],
+      "reference_answer": "Up to 5 administrators per year.",
+      "answerable": true
+    },
+    {
+      "id": "q054",
+      "query": "What passing score is required for the admin certification exam?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "a passing score is 80% or higher"
+        }
+      ],
+      "reference_answer": "80% or higher.",
+      "answerable": true
+    },
+    {
+      "id": "q055",
+      "query": "How long is the admin certification valid before recertification is required?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "valid for 18\nmonths"
+        }
+      ],
+      "reference_answer": "18 months.",
+      "answerable": true
+    },
+    {
+      "id": "q056",
+      "query": "What is required for a Quarterly Business Review to count toward a customer's QBR cadence?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "attended by at least one customer stakeholder above the\nindividual-contributor level"
+        }
+      ],
+      "reference_answer": "It must be attended by at least one customer stakeholder above the individual-contributor level, or it is rescheduled instead of recorded as complete.",
+      "answerable": true
+    },
+    {
+      "id": "q057",
+      "query": "Can a Starter plan customer get a guided data migration for free?",
+      "category": "terminology_mismatch",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "available only on the Enterprise plan at no additional cost, or\non the Professional plan for a one-time fee"
+        }
+      ],
+      "reference_answer": "No \u2014 free guided migration is Enterprise-only; Professional plan customers pay a one-time fee, and it isn't described as available to Starter plan customers at all.",
+      "answerable": true
+    },
+    {
+      "id": "q058",
+      "query": "What happens to a data migration if the customer's data export is incomplete?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "migrations that stall due to incomplete customer-provided data are\npaused, not cancelled"
+        }
+      ],
+      "reference_answer": "The migration is paused, not cancelled, and resumes once the customer supplies the missing data.",
+      "answerable": true
+    },
+    {
+      "id": "q059",
+      "query": "Is there an emergency-access account exempt from SSO enforcement?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "a single designated emergency-access\naccount, which is exempt from SSO enforcement"
+        }
+      ],
+      "reference_answer": "Yes \u2014 a single designated emergency-access account is exempt from SSO enforcement so admins are never locked out if the identity provider is unreachable.",
+      "answerable": true
+    },
+    {
+      "id": "q060",
+      "query": "What roles are available in the Admin Console?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "supports four roles: Owner,\nAdmin, Member, and Viewer"
+        }
+      ],
+      "reference_answer": "Owner, Admin, Member, and Viewer.",
+      "answerable": true
+    },
+    {
+      "id": "q061",
+      "query": "Can the last remaining Owner of a workspace be removed?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "the console blocks removing the last remaining Owner"
+        }
+      ],
+      "reference_answer": "No \u2014 a workspace must always have at least one Owner; the console blocks removing the last one.",
+      "answerable": true
+    },
+    {
+      "id": "q062",
+      "query": "Are custom roles available on the Professional plan?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "custom roles are not available on the Professional or Starter\nplans"
+        }
+      ],
+      "reference_answer": "No \u2014 custom roles are Enterprise-only.",
+      "answerable": true
+    },
+    {
+      "id": "q063",
+      "query": "How long are audit logs retained on the Enterprise plan?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "retained for 180 days on\nthe Enterprise plan"
+        }
+      ],
+      "reference_answer": "180 days (versus 30 days on Professional; Starter has no audit log access).",
+      "answerable": true
+    },
+    {
+      "id": "q064",
+      "query": "Which regions can Enterprise customers choose for data residency?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "select a\ndata residency region (US, EU, or APAC)"
+        }
+      ],
+      "reference_answer": "US, EU, or APAC.",
+      "answerable": true
+    },
+    {
+      "id": "q065",
+      "query": "How long does it take to migrate data to a new residency region after signup?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "currently takes 2 to 4 weeks depending on account\nsize"
+        }
+      ],
+      "reference_answer": "2 to 4 weeks depending on account size.",
+      "answerable": true
+    },
+    {
+      "id": "q066",
+      "query": "What is the default session timeout for a newly created Enterprise workspace?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "the platform default for\nnewly created Enterprise workspaces is 8 hours"
+        }
+      ],
+      "reference_answer": "8 hours (configurable between 15 minutes and 24 hours).",
+      "answerable": true
+    },
+    {
+      "id": "q067",
+      "query": "What uptime does the Enterprise plan guarantee?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "a 99.9% monthly uptime SLA"
+        }
+      ],
+      "reference_answer": "99.9% monthly uptime.",
+      "answerable": true
+    },
+    {
+      "id": "q068",
+      "query": "Is there a cap on the service credit for an uptime SLA breach?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "capped at 50% of the monthly fee"
+        }
+      ],
+      "reference_answer": "Yes \u2014 service credits are capped at 50% of the monthly fee.",
+      "answerable": true
+    },
+    {
+      "id": "q069",
+      "query": "How long do customers have to request a service credit after a month with an SLA breach?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "requested within 30 days of the end of the affected month"
+        }
+      ],
+      "reference_answer": "Within 30 days of the end of the affected month.",
+      "answerable": true
+    },
+    {
+      "id": "q070",
+      "query": "Is there a limit on how many marketplace integrations a workspace can enable?",
+      "category": "terminology_mismatch",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "There is no limit on the number of\nmarketplace integrations"
+        }
+      ],
+      "reference_answer": "No \u2014 there is no limit on marketplace integrations.",
+      "answerable": true
+    },
+    {
+      "id": "q071",
+      "query": "When does the annual compensation review cycle happen?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "in the March review cycle,\nwith adjustments effective April 1st"
+        }
+      ],
+      "reference_answer": "The March review cycle, with adjustments effective April 1st.",
+      "answerable": true
+    },
+    {
+      "id": "q072",
+      "query": "How long is the vesting cliff for new-hire equity grants?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "vest over 4 years with a 1-year cliff"
+        }
+      ],
+      "reference_answer": "A 1-year cliff, with 25% vesting at the cliff and the remainder monthly over the following 36 months.",
+      "answerable": true
+    },
+    {
+      "id": "q073",
+      "query": "Do refresh equity grants have a vesting cliff?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "vest monthly over 4 years with no cliff"
+        }
+      ],
+      "reference_answer": "No \u2014 refresh grants vest monthly over 4 years with no cliff.",
+      "answerable": true
+    },
+    {
+      "id": "q074",
+      "query": "What is the company's 401(k) match?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "matches 401(k) contributions dollar-for-dollar up to 4%"
+        }
+      ],
+      "reference_answer": "Dollar-for-dollar up to 4% of base salary, deposited each pay period and vested immediately.",
+      "answerable": true
+    },
+    {
+      "id": "q075",
+      "query": "When is the annual open enrollment period for health insurance?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "each November, with coverage effective January 1st"
+        }
+      ],
+      "reference_answer": "Each November, with coverage effective January 1st of the following year.",
+      "answerable": true
+    },
+    {
+      "id": "q076",
+      "query": "How many days does a new hire have to enroll in health insurance outside open enrollment?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "New hires have 30 days from their start date to enroll"
+        }
+      ],
+      "reference_answer": "30 days from their start date.",
+      "answerable": true
+    },
+    {
+      "id": "q077",
+      "query": "What is the annual professional development budget per employee?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "annual professional development budget of $1,500"
+        }
+      ],
+      "reference_answer": "$1,500 per year, non-rolling and non-cashable.",
+      "answerable": true
+    },
+    {
+      "id": "q078",
+      "query": "At what expense amount from the professional development budget is manager approval required?",
+      "category": "single_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "any single expense over $500"
+        }
+      ],
+      "reference_answer": "Any single expense over $500.",
+      "answerable": true
+    },
+    {
+      "id": "q079",
+      "query": "How much is the employee referral bonus for a hard-to-fill engineering leadership role?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "$5,000 for hard-to-fill engineering and sales\nleadership roles"
+        }
+      ],
+      "reference_answer": "$5,000, paid half after 30 days and half after 6 months.",
+      "answerable": true
+    },
+    {
+      "id": "q080",
+      "query": "After how many years of employment does someone become eligible for a sabbatical?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "eligible for a 4-week paid sabbatical after 5 years"
+        }
+      ],
+      "reference_answer": "After 5 years of continuous employment, and again every 5 years thereafter.",
+      "answerable": true
+    },
+    {
+      "id": "q081",
+      "query": "Does sabbatical time count against an employee's regular PTO balance?",
+      "category": "terminology_mismatch",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "does not count against standard PTO balance"
+        }
+      ],
+      "reference_answer": "No \u2014 sabbatical time is separate from and does not count against standard PTO.",
+      "answerable": true
+    },
+    {
+      "id": "q082",
+      "query": "If a data breach is suspected, who must be told, and how long does the company keep badge access logs generally?",
+      "category": "multi_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "reported to\nthe Security team within 1 hour of discovery"
+        },
+        {
+          "document_id": "security_policy",
+          "content_marker": "Office badge access logs are retained for 1 year"
+        }
+      ],
+      "reference_answer": "Suspected incidents must be reported to the Security team within 1 hour; separately, badge access logs are retained for 1 year.",
+      "answerable": true
+    },
+    {
+      "id": "q083",
+      "query": "What are the escalation steps if an on-call page is never acknowledged?",
+      "category": "multi_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "the page automatically escalates to the secondary on-call engineer"
+        },
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "the page escalates to the\nengineering director directly"
+        }
+      ],
+      "reference_answer": "It escalates first to the secondary on-call engineer after 10 minutes, then to the engineering director if neither acknowledges within 20 minutes total.",
+      "answerable": true
+    },
+    {
+      "id": "q084",
+      "query": "What is required both to enroll in the certification program and to pass it?",
+      "category": "multi_chunk",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "enroll up to 5 administrators per year"
+        },
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "a passing score is 80% or higher"
+        }
+      ],
+      "reference_answer": "Enterprise customers can enroll up to 5 administrators per year, and a passing score of 80% or higher is required.",
+      "answerable": true
+    },
+    {
+      "id": "q085",
+      "query": "How many days of PTO does a 5-year sabbatical grant, and how many days of PTO do full-time employees get per year \u2014 are these the same benefit?",
+      "category": "cross_document_discriminator",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "eligible for a 4-week paid sabbatical after 5 years"
+        },
+        {
+          "document_id": "employee_handbook",
+          "content_marker": "15 days of paid time off"
+        }
+      ],
+      "reference_answer": "No, they are separate: a 4-week paid sabbatical after 5 years of employment (compensation_and_benefits) is distinct from and does not count against the standard 15 days of annual PTO (employee_handbook).",
+      "answerable": true
+    },
+    {
+      "id": "q086",
+      "query": "Both the engineering practices doc and the incident runbook discuss on-call \u2014 how long is a shift and when does it hand off?",
+      "category": "cross_document_discriminator",
+      "relevant_chunks": [
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "handed off every Monday at 10:00 AM"
+        }
+      ],
+      "reference_answer": "An on-call rotation shift is one full week, handed off every Monday at 10:00 AM in the team's primary time zone.",
+      "answerable": true
+    },
+    {
+      "id": "q087",
+      "query": "Does the Enterprise Admin Console's audit log retention match the security policy's badge access log retention?",
+      "category": "cross_document_discriminator",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "retained for 180 days on\nthe Enterprise plan"
+        },
+        {
+          "document_id": "security_policy",
+          "content_marker": "Office badge access logs are retained for 1 year"
+        }
+      ],
+      "reference_answer": "No \u2014 Enterprise audit logs are retained for 180 days, while physical badge access logs are retained for 1 year; these are different retention periods for different log types.",
+      "answerable": true
+    },
+    {
+      "id": "q088",
+      "query": "What is the company's policy on parental leave?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Deliberately unanswerable from this corpus \u2014 used to check that the system declines rather than fabricates an answer."
+    },
+    {
+      "id": "q089",
+      "query": "Does the company offer a 4-day work week?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered by any document in the corpus."
+    },
+    {
+      "id": "q090",
+      "query": "What is the process for requesting a company credit card?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 the expense policy in the handbook covers reimbursement, not corporate cards."
+    },
+    {
+      "id": "q091",
+      "query": "What programming languages does the engineering team use?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 the engineering practices doc covers process (PRs, deployments, on-call), not the tech stack."
+    },
+    {
+      "id": "q092",
+      "query": "How does the platform handle GDPR data subject access requests?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 data retention/deletion is discussed in product_faq.pdf, but not GDPR-specific DSAR handling."
+    },
+    {
+      "id": "q093",
+      "query": "What is the minimum contract value for the Enterprise plan?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 pricing tiers and features are discussed, but not a minimum contract value."
+    },
+    {
+      "id": "q094",
+      "query": "Can employees work fully remotely from another country?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 remote work policy covers days-per-week, not international remote work."
+    },
+    {
+      "id": "q095",
+      "query": "What is the company's carbon offset or sustainability policy?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered by any document in the corpus."
+    },
+    {
+      "id": "q096",
+      "query": "Does the enterprise console support two-way Slack notifications?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 the console FAQ covers SSO, RBAC, audit logs, data residency, and integrations generally, not specific Slack functionality."
+    },
+    {
+      "id": "q097",
+      "query": "What is the penalty for an employee who violates the security policy?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 the security policy states requirements and reporting expectations, but not a disciplinary consequence schedule for violations."
+    },
+    {
+      "id": "q098",
+      "query": "What is the process to set up SSO for a workspace?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "configure SAML 2.0\nor OIDC single sign-on from the Admin Console under Security Settings"
+        }
+      ],
+      "reference_answer": "Enterprise admins configure SAML 2.0 or OIDC SSO from the Admin Console under Security Settings.",
+      "answerable": true
+    },
+    {
+      "id": "q099",
+      "query": "How does a user get an account automatically created via SSO without being manually invited?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "just-in-time provisioning is enabled, a user's first successful SSO login automatically\ncreates their account"
+        }
+      ],
+      "reference_answer": "With just-in-time provisioning enabled, a user's first successful SSO login automatically creates their account with the role from the SAML assertion's group mapping; without it, an admin must manually invite each user first.",
+      "answerable": true
+    },
+    {
+      "id": "q100",
+      "query": "What must a departing employee do with company equipment, and by when?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "company equipment must be\nreturned within 5 business days"
+        }
+      ],
+      "reference_answer": "Company equipment must be returned within 5 business days of offboarding.",
+      "answerable": true
+    },
+    {
+      "id": "q101",
+      "query": "What happens after a customer account's health score triggers an at-risk flag?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "triggering a required check-in call within 5\nbusiness days"
+        }
+      ],
+      "reference_answer": "It triggers a required CSM check-in call within 5 business days; three consecutive at-risk weeks escalates to the VP of Customer Success.",
+      "answerable": true
+    },
+    {
+      "id": "q102",
+      "query": "What is the process for escalating a support ticket directly to the product team?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "escalated directly to the product team only if it\nrepresents a confirmed bug affecting an Enterprise customer with no\nworkaround"
+        }
+      ],
+      "reference_answer": "It can only be escalated if it's a confirmed bug affecting an Enterprise customer with no workaround, and receives same-business-day product manager acknowledgment.",
+      "answerable": true
+    },
+    {
+      "id": "q103",
+      "query": "How does an employee request time off from their professional development budget for an expensive course?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "Manager approval is required for any\nsingle expense over $500"
+        }
+      ],
+      "reference_answer": "Manager approval is required for any single professional-development expense over $500.",
+      "answerable": true
+    },
+    {
+      "id": "q104",
+      "query": "What is required for an off-cycle compensation review after a promotion?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "receives an off-cycle compensation review within 30 days of the promotion\ntaking effect"
+        }
+      ],
+      "reference_answer": "The employee receives an off-cycle compensation review within 30 days of the promotion taking effect, rather than waiting for the annual cycle.",
+      "answerable": true
+    },
+    {
+      "id": "q105",
+      "query": "How far in advance must a sabbatical be scheduled?",
+      "category": "procedural",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "must\nbe scheduled at least 60 days in advance with manager approval"
+        }
+      ],
+      "reference_answer": "At least 60 days in advance, with manager approval.",
+      "answerable": true
+    },
+    {
+      "id": "q106",
+      "query": "Combining the professional development budget and the smaller referral bonus, what is the total?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "annual professional development budget of $1,500"
+        },
+        {
+          "document_id": "compensation_and_benefits",
+          "content_marker": "referral bonus\nof $3,000 for most roles"
+        }
+      ],
+      "reference_answer": "$1,500 (professional development budget) + $3,000 (standard referral bonus) = $4,500.",
+      "answerable": true
+    },
+    {
+      "id": "q107",
+      "query": "Is the Enterprise plan's audit log retention longer or shorter than the security policy's badge access log retention?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "retained for 180 days on\nthe Enterprise plan"
+        },
+        {
+          "document_id": "security_policy",
+          "content_marker": "Office badge access logs are retained for 1 year"
+        }
+      ],
+      "reference_answer": "Shorter \u2014 180 days of audit log retention versus 1 year (365 days) of badge access log retention.",
+      "answerable": true
+    },
+    {
+      "id": "q108",
+      "query": "How many total days' notice would be needed to both cancel a one-year contract and request an uptime SLA credit for the same final month?",
+      "category": "numerical",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "at least 30 days before the renewal date"
+        },
+        {
+          "document_id": "enterprise_console_faq",
+          "content_marker": "requested within 30 days of the end of the affected month"
+        }
+      ],
+      "reference_answer": "Both windows are 30 days \u2014 30 days before renewal to cancel, and within 30 days after the month ends to request a service credit.",
+      "answerable": true
+    },
+    {
+      "id": "q109",
+      "query": "Which support SLA is faster \u2014 Enterprise urgent issues or the Sev1 status page update requirement?",
+      "category": "cross_document_discriminator",
+      "relevant_chunks": [
+        {
+          "document_id": "customer_success_playbook",
+          "content_marker": "guaranteed a first response within 1 hour for\nissues marked urgent"
+        },
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "post an initial status page update within 15 minutes of a Sev1"
+        }
+      ],
+      "reference_answer": "The Sev1 status page update requirement is faster (15 minutes) than the Enterprise urgent-issue first-response SLA (1 hour) \u2014 they measure different things but both are real time commitments in the corpus.",
+      "answerable": true
+    },
+    {
+      "id": "q110",
+      "query": "Does the security policy's incident reporting window match the incident runbook's IC assignment window?",
+      "category": "cross_document_discriminator",
+      "relevant_chunks": [
+        {
+          "document_id": "security_policy",
+          "content_marker": "reported to\nthe Security team within 1 hour of discovery"
+        },
+        {
+          "document_id": "incident_response_runbook",
+          "content_marker": "The Incident Commander must be assigned within 10 minutes of a Sev1 being\ndeclared"
+        }
+      ],
+      "reference_answer": "No \u2014 security incident reporting has a 1-hour window, while Sev1 Incident Commander assignment has a much shorter 10-minute window; they are different processes with different timelines.",
+      "answerable": true
     }
   ]
 }

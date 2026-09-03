@@ -151,14 +151,22 @@ jobs:
       - name: Run eval harness unit tests
         run: uv run pytest ../eval/tests -v
 
-      - name: Run evaluation harness
-        run: uv run python ../eval/run_eval.py
+      - name: Run evaluation suite (retrieval, hallucination guard, latency, tests+coverage)
+        run: uv run python ../eval/run_all.py --skip-tests
 
-      - name: Upload eval report
+      - name: Generate final report
+        run: uv run python ../eval/generate_final_report.py
+
+      - name: Upload eval reports
         uses: actions/upload-artifact@v4
         with:
           name: eval-report
-          path: eval/results/latest.json
+          path: |
+            eval/results/final_report.json
+            eval/results/FINAL_REPORT.md
+            eval/results/retrieval_only_latest.json
+            eval/results/hallucination_latest.json
+            eval/results/latency_latest.json
 
   frontend:
     name: Frontend (lint + test)

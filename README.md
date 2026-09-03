@@ -137,36 +137,29 @@ uv run alembic upgrade head
 uv run pytest                       # 209 tests, ~97% coverage
 uv run pytest --cov --cov-report=term-missing
 
-uv run pytest ../eval/tests         # eval harness's own unit tests (metrics math)
-uv run python ../eval/run_eval.py   # full retrieval + generation evaluation report
+uv run pytest ../eval/tests                     # eval harness's own unit tests (metrics math)
+uv run python ../eval/run_all.py                # retrieval + hallucination guard + latency + tests
+uv run python ../eval/run_all.py --generation-sample 20   # + real generation/groundedness eval
+uv run python ../eval/generate_final_report.py  # renders results/FINAL_REPORT.md
 ```
+
+See [`eval/README.md`](eval/README.md) for the full framework layout and every phase's
+independent command.
 
 ### Demo
 
-Terminal recording of the real evaluation harness running end to end:
+Terminal recording of an earlier capture of this evaluation harness running end to end,
+against the dataset's original 21-query/3-document scope (the dataset has since grown to 110
+queries over 8 documents — see § Evaluation below for the current numbers):
 
 ![Terminal recording of eval/run_eval.py running real local embeddings, real Ollama generation, and a real Ollama judge, printing the final Recall@K/MRR/NDCG and faithfulness/relevance report](docs/screenshots/eval_demo.gif)
 
-This is genuine, unedited terminal output — every `retrieval_complete` line and every number in the
-final report is real, not staged. Unlike an earlier version of this recording, nothing here is
-synthetic: `EMBEDDING_PROVIDER=local` and `CHAT_PROVIDER=ollama` mean the dense embeddings, the
-generated answers, *and* the LLM-as-judge scoring all came from actually calling real local models —
-no API key, no lexical-overlap heuristic standing in for anything. It's a `--limit-queries 6`
-partial sample rather than the full 21-query labeled set (explained in
-[`eval/RESULTS.md`](eval/RESULTS.md) — this development machine's memory couldn't reliably sustain
-the full dataset's ~60 sequential CPU-bound Ollama calls), and the judge is the same small model
-doing the generating, both honestly labeled in the recording itself, not glossed over. See
-[`eval/RESULTS.md`](eval/RESULTS.md) for the full numbers, the partial-sample caveat, and a real
-JSON-parsing bug this exact run surfaced and fixed (a small local model's occasional malformed
-judge output was silently scoring genuinely correct answers as 0 — see § Update: a real local-mode
-run).
-
-The eval harness runs the real retrieval pipeline (dense-only, BM25-only, and fused+reranked) and
-real local cross-encoder reranker against a 21-query labeled dataset, reporting Recall@K, MRR, and
-NDCG@5 per variant, plus LLM-as-judge faithfulness and answer-relevance scores. See
-[`eval/RESULTS.md`](eval/RESULTS.md) for the current numbers and an honest account of what they do
-and don't demonstrate (including a real calibration bug the harness found and fixed —
-`rag_min_rerank_score` was rejecting a genuinely correct answer).
+Genuine, unedited terminal output from that run — every `retrieval_complete` line and every
+number in it is real, not staged: `EMBEDDING_PROVIDER=local` and `CHAT_PROVIDER=ollama` mean
+the dense embeddings, the generated answers, *and* the LLM-as-judge scoring all came from
+actually calling real local models, no API key, no lexical-overlap heuristic standing in for
+anything. See [`eval/RESULTS.md`](eval/RESULTS.md)'s § History for that run's own findings
+(a partial-sample caveat and a real JSON-parsing bug it surfaced and fixed).
 
 All of the above needs a real Postgres/Qdrant (and Redis, for the main test suite) — either the
 dev compose stack (`docker compose -f infra/docker-compose.yml up -d postgres redis qdrant`) or
@@ -174,6 +167,46 @@ any equivalent. The backend test suite (`ruff`, `pip-audit`, migrations, `pytest
 push against ephemeral service containers in CI; the eval harness job runs the identical sequence
 but only on demand (`workflow_dispatch` from the Actions tab), deliberately — see `.github/workflows/ci.yml`'s
 comment on that job for why.
+
+## Evaluation
+
+The full, reproducible evaluation framework lives in [`eval/`](eval/README.md) — every number
+below comes from actually running it against this repository's real retrieval and generation
+pipeline (`eval/run_all.py`, then `eval/generate_final_report.py`; see
+[`eval/RESULTS.md`](eval/RESULTS.md) for the full narrative and
+[`eval/results/FINAL_REPORT.md`](eval/results/FINAL_REPORT.md) for the complete structured
+report).
+
+**Dataset:** 110 labeled queries, 8 documents, 50 chunks — 99 answerable, 11 deliberately
+unanswerable, across 8 question categories (single-chunk, numerical, procedural,
+out-of-corpus, cross-document-discriminator, terminology-mismatch, multi-chunk, PDF-page).
+
+**Retrieval** (real local embeddings, real BM25, real cross-encoder reranker, full dataset):
+
+| Method | Recall@1 | Recall@5 | MRR | NDCG@5 |
+|---|---|---|---|---|
+| Dense only | 0.924 | 0.995 | 0.976 | 0.979 |
+| BM25 only | 0.788 | 0.985 | 0.895 | 0.912 |
+| Dense + BM25 + RRF | 0.904 | 1.000 | 0.970 | 0.976 |
+| Dense + BM25 + RRF + Reranker | **0.929** | 1.000 | **0.980** | **0.986** |
+
+**Hallucination guard** (full dataset, based on real retrieval + real reranker score, no LLM
+call): **95.5% accuracy**, 80.0% precision, 72.7% recall, F1 0.762 — TP=8, TN=97, FP=2, FN=3.
+The recall gap is real and specific, not evenly spread: it concentrates in questions where the
+reranker finds topically-similar-but-wrong content and scores it confidently (see
+[`eval/RESULTS.md`](eval/RESULTS.md) for the exact queries).
+
+**Generation** (real `llama3.2:3b` via Ollama, 10-query stratified sample — see
+[`eval/RESULTS.md`](eval/RESULTS.md) for why not the full 110): faithfulness 0.958 and answer
+correctness 0.792 on answered queries; citation correctness 1.000 but citation completeness
+only 0.571 — the model cites correctly but not exhaustively.
+
+**Latency** (real, this development machine): retrieval ~8ms mean, reranking ~1.08s mean
+(p95 1.4s), full retrieval+rerank ~1.22s mean; generation ~70s mean on CPU-bound local
+`llama3.2:3b` (a hosted API or GPU inference would be dramatically faster).
+
+**Testing:** 209 tests, 0 failed, 97% code coverage — re-verified fresh as part of this
+evaluation.
 
 ## Design decisions
 
@@ -275,5 +308,7 @@ out of scope, not silently omitted — see `ARCHITECTURE.md`'s "What's deliberat
 section for the complete list and reasoning: S3 storage (an abstraction exists, no second
 implementation), a TLS-terminating reverse proxy in front of the production compose stack,
 Kubernetes/multi-region deployment, conversation deletion and older-turn summarization, CSRF
-tokens beyond `SameSite`, and growing the eval dataset's labeled negative examples to further
-validate `rag_min_rerank_score`.
+tokens beyond `SameSite`, and a second, subtler hallucination-mitigation layer beyond the
+rerank-score threshold (the guard's real confusion matrix — see § Evaluation — shows its
+actual gap: topically-similar-but-wrong content occasionally scores confidently enough to slip
+past the threshold).

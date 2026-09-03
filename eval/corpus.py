@@ -58,6 +58,7 @@ class EvalQuery:
     category: str
     relevant_chunk_ids: set[uuid.UUID]
     reference_answer: str | None
+    answerable: bool = True
     notes: str | None = None
 
 
@@ -159,6 +160,7 @@ async def build_corpus(
                 category=q["category"],
                 relevant_chunk_ids=relevant_ids,
                 reference_answer=q.get("reference_answer"),
+                answerable=q.get("answerable", q["category"] != "out_of_corpus"),
                 notes=q.get("notes"),
             )
         )

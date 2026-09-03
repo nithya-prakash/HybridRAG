@@ -1,10 +1,15 @@
 import json
+import uuid
 
 import pytest
 
 from eval.metrics.generation_metrics import (
+    build_answer_correctness_messages,
     build_faithfulness_messages,
     build_relevance_messages,
+    citation_completeness,
+    citation_correctness,
+    score_answer_correctness,
     score_faithfulness,
     score_relevance,
 )
@@ -108,3 +113,45 @@ async def test_relevance_prompt_excludes_context_and_includes_question_and_answe
     assert "What is X?" in user_message
     assert "X is Y." in user_message
     assert "Context" not in user_message
+
+
+async def test_score_answer_correctness_parses_like_the_other_judges():
+    judge = _StubJudge(json.dumps({"score": 5, "rationale": "matches the reference exactly"}))
+
+    result = await score_answer_correctness(judge, "q?", "the reference answer", "a correct answer")
+
+    assert result.parse_ok is True
+    assert result.score == 1.0
+
+
+async def test_answer_correctness_prompt_handles_unanswerable_reference():
+    # reference_answer is None for out-of-corpus queries (see eval/corpus.py)
+    messages = build_answer_correctness_messages("q?", None, "I don't have enough information.")
+
+    user_message = messages[-1]["content"]
+    assert "unanswerable" in user_message
+    assert "I don't have enough information." in user_message
+
+
+async def test_citation_correctness_is_fraction_of_cited_chunks_that_are_labeled_relevant():
+    a, b, c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    relevant = {a, b}
+
+    assert citation_correctness([a, c], relevant) == 0.5
+    assert citation_correctness([a, b], relevant) == 1.0
+
+
+async def test_citation_correctness_is_undefined_when_nothing_was_cited():
+    assert citation_correctness([], {uuid.uuid4()}) is None
+
+
+async def test_citation_completeness_is_recall_of_relevant_chunks_among_citations():
+    a, b, c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    relevant = {a, b, c}
+
+    assert citation_completeness([a], relevant) == pytest.approx(1 / 3)
+    assert citation_completeness([a, b, c], relevant) == 1.0
+
+
+async def test_citation_completeness_is_undefined_when_query_has_no_relevant_chunks():
+    assert citation_completeness([uuid.uuid4()], set()) is None

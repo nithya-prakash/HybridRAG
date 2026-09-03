@@ -93,9 +93,12 @@ class OllamaChatBackend(ChatBackend):
         self._model = settings.ollama_chat_model
         # Local CPU inference is slow relative to a hosted API — a generous
         # timeout here avoids misclassifying "still generating" as "the
-        # service is down."
+        # service is down." Raised from 180s to 300s after the eval harness's
+        # real generation runs observed occasional single calls exceeding
+        # 180s under sustained load on constrained hardware (see
+        # eval/RESULTS.md) — not a theoretical concern.
         self._client = client or httpx.AsyncClient(
-            base_url=settings.ollama_base_url, timeout=180.0
+            base_url=settings.ollama_base_url, timeout=300.0
         )
 
     async def complete(self, messages: list[dict[str, str]]) -> str:

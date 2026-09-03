@@ -39,6 +39,8 @@ object the caller constructs.
 from __future__ import annotations
 
 import json
+import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -70,6 +72,26 @@ scored a 5 if the question truly can't be answered from the given context, since
 correct response in that case — do not penalize an honest "I don't know" as irrelevant.
 
 Judge ONLY relevance to the question — not factual accuracy of the content."""
+
+ANSWER_CORRECTNESS_RUBRIC = """You are grading whether an AI-generated answer is factually \
+correct relative to a known-good reference answer, on a 1-5 scale:
+
+5 - Fully correct: conveys the same facts as the reference answer, no contradictions.
+4 - Mostly correct: matches the reference on the important facts, but omits or slightly \
+    imprecisely states a minor detail.
+3 - Partially correct: gets the general gist right but is wrong or missing on a fact that \
+    matters.
+2 - Mostly incorrect: contradicts the reference on the main point, even if some minor detail \
+    is right.
+1 - Completely incorrect, or answers a different question than the reference does.
+
+If the reference answer indicates the question is genuinely unanswerable (None/empty) and the \
+generated answer honestly declines, score 5 — that is the correct behavior, not a failure to \
+answer. If the reference indicates the question IS answerable but the generated answer declines \
+anyway, score 1 — that is a real correctness failure (a false abstention), not neutral.
+
+Judge ONLY factual correctness against the reference — not style, completeness of phrasing, or \
+whether the answer cites its sources."""
 
 _JUDGE_INSTRUCTIONS = (
     'Respond with ONLY a JSON object of the form {{"score": <integer 1-5>, "rationale": '
@@ -182,3 +204,64 @@ async def score_faithfulness(judge: Judge, question: str, context: str, answer: 
 async def score_relevance(judge: Judge, question: str, answer: str) -> JudgeScore:
     raw = await judge.complete(build_relevance_messages(question, answer))
     return _parse_judge_response(raw)
+
+
+def build_answer_correctness_messages(
+    question: str, reference_answer: str | None, answer: str
+) -> list[dict[str, str]]:
+    reference = reference_answer if reference_answer else "(none — this question is unanswerable)"
+    user_content = (
+        f"Question: {question}\n\n"
+        f"Reference answer:\n{reference}\n\n"
+        f"Answer to grade:\n{answer}\n\n{_JUDGE_INSTRUCTIONS}"
+    )
+    return [
+        {"role": "system", "content": ANSWER_CORRECTNESS_RUBRIC},
+        {"role": "user", "content": user_content},
+    ]
+
+
+async def score_answer_correctness(
+    judge: Judge, question: str, reference_answer: str | None, answer: str
+) -> JudgeScore:
+    raw = await judge.complete(
+        build_answer_correctness_messages(question, reference_answer, answer)
+    )
+    return _parse_judge_response(raw)
+
+
+def citation_correctness(
+    cited_chunk_ids: Sequence[uuid.UUID], relevant_chunk_ids: set[uuid.UUID]
+) -> float | None:
+    """Of the chunks the answer actually cited, what fraction are chunks a
+    human labeler confirmed are actually relevant to this question? A
+    deterministic proxy for "do the citations point to supporting
+    material" — cheaper and more reproducible than asking an LLM judge to
+    re-derive relevance itself, and grounded in the same hand-labeled data
+    retrieval metrics use. Undefined (None) when the answer cited nothing —
+    that's a completeness problem (see `citation_completeness`), not an
+    incorrectness one; there's nothing to be *wrong* about with zero
+    citations.
+    """
+    if not cited_chunk_ids:
+        return None
+    correct = sum(1 for c in cited_chunk_ids if c in relevant_chunk_ids)
+    return correct / len(cited_chunk_ids)
+
+
+def citation_completeness(
+    cited_chunk_ids: Sequence[uuid.UUID], relevant_chunk_ids: set[uuid.UUID]
+) -> float | None:
+    """Of the chunks a human labeler confirmed are relevant to this
+    question, what fraction did the answer actually cite? Low completeness
+    with high correctness means the answer is citing real sources but
+    leaving some of the actually-relevant material uncredited — a real,
+    distinct failure mode from citing the wrong thing. Undefined (None) when
+    there is no labeled-relevant chunk for this query (e.g. the
+    out-of-corpus/unanswerable set) — there's nothing to have completely
+    cited.
+    """
+    if not relevant_chunk_ids:
+        return None
+    cited = set(cited_chunk_ids)
+    return len(cited & relevant_chunk_ids) / len(relevant_chunk_ids)

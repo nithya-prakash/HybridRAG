@@ -1259,32 +1259,45 @@ account of where and why the system falls short (`eval/RESULTS.md`).
 
 ```
 eval/
-  datasets/knowledge_base_eval.json   # queries + labeled relevant chunks + reference answers
-  datasets/documents/                 # the 3 fixture source documents (2 md, 1 real multi-page PDF)
-  metrics/retrieval_metrics.py        # Recall@K, MRR, NDCG — pure functions, no I/O
-  metrics/generation_metrics.py       # LLM-as-judge faithfulness/relevance — prompts + parsing
+  datasets/knowledge_base_eval.json   # 110 queries + labeled relevant chunks + reference answers
+  datasets/documents/                 # 8 fixture source documents (3 original + 5 added to grow
+                                       # the corpus for this evaluation — see RESULTS.md)
+  metrics/retrieval_metrics.py        # Recall@K, Precision@K, MRR, NDCG@K — pure functions, no I/O
+  metrics/generation_metrics.py       # LLM-as-judge faithfulness/relevance/answer-correctness,
+                                       # deterministic citation correctness/completeness
   fakes.py                            # synthetic embedding/chat/judge/reranker fallbacks
   corpus.py                           # indexes the fixture docs through the real parsing/embedding pipeline
-  run_eval.py                         # CLI: runs everything, writes a JSON report + prints a table
+  run_eval.py                         # retrieval (5 configurations) + generation/groundedness eval
+  evaluate_hallucination.py           # hallucination guard confusion matrix (no LLM call needed)
+  benchmark_latency.py                # real per-stage latency, mean/p50/p95/p99
+  run_all.py                          # one command: runs every phase, writes final_report.json
+  generate_final_report.py            # renders final_report.json into results/FINAL_REPORT.md
   tests/                              # unit tests for the metrics modules themselves
   results/                            # generated reports (gitignored; RESULTS.md documents figures)
 ```
 
-It intentionally lives outside `backend/`'s package and its own `pytest` config (`testpaths =
+See `eval/README.md` for the full breakdown and how to run each phase independently. It
+intentionally lives outside `backend/`'s package and its own `pytest` config (`testpaths =
 ["tests"]` scopes the main suite to `backend/tests/` so `eval/`'s tests never get pulled into that
 run's coverage gate by accident) — this is deliberately a separate, optional tool, not a 22nd
 service class the main suite is expected to exercise on every push.
 
 ### The labeled dataset and content-marker resolution
 
-`knowledge_base_eval.json` hand-labels 21 queries against 3 fixture documents (an employee
-handbook, an engineering-practices doc, and a real 4-page PDF generated with PyMuPDF so its page
-numbers are genuine, not estimated — see the earlier page-estimation caveat). The query mix is
-deliberate, not incidental: single-chunk lookups, two multi-chunk queries (the right answer spans
-two sections), one cross-document discriminator (two documents both mention "PTO" for unrelated
-reasons, testing whether retrieval finds the one that's actually relevant rather than matching on
-the shared term), two PDF-page-specific queries, and one deliberately out-of-corpus question to
-exercise the decline path from the conversational RAG work.
+`knowledge_base_eval.json` hand-labels 110 queries against 8 fixture documents: the original 3
+(an employee handbook, an engineering-practices doc, and a real 4-page PDF generated with PyMuPDF
+so its page numbers are genuine, not estimated) plus 5 more synthetic fixture documents (security
+policy, incident response runbook, customer success playbook, enterprise admin console FAQ,
+compensation & benefits) written specifically to grow this eval corpus with genuinely new,
+non-redundant material rather than padding more questions onto the same 3 documents. The query mix
+spans eight categories: single-chunk lookups (the largest share), multi-chunk (the right answer
+spans two sections), cross-document discriminators (two documents both mention a similar term for
+unrelated reasons, testing whether retrieval finds the one that's actually relevant), numerical
+(reasoning over or comparing numbers, not just looking one up), procedural ("what's the process
+for..."), terminology-mismatch (the question paraphrases vocabulary the source text doesn't use
+verbatim), PDF-page-specific, and out-of-corpus (deliberately unanswerable, to exercise the decline
+path). 110 was a deliberate stopping point short of the ~200-250 originally targeted — see
+`eval/RESULTS.md` for that tradeoff.
 
 A chunk's id doesn't exist until after indexing, so the dataset can't reference chunk ids directly.
 Instead each labeled "relevant chunk" is a short, unique substring of the source document
@@ -1292,53 +1305,87 @@ Instead each labeled "relevant chunk" is a short, unique substring of the source
 substring-matching (whitespace-normalized, so a marker isn't broken by where the source text
 happens to wrap) against each chunk's actual persisted content. If a marker doesn't match anything
 post-indexing, the harness aborts loudly rather than silently scoring against an empty or wrong
-ground truth — a dataset/parser mismatch here would otherwise corrupt every downstream number.
+ground truth — a dataset/parser mismatch here would otherwise corrupt every downstream number (this
+caught two real marker/text mismatches during this evaluation's own construction, fixed before any
+number was trusted).
 
-### Retrieval evaluation: three variants, one fetch depth
+### Retrieval evaluation: five configurations, one fetch depth
 
-For every query, `run_eval.py` runs three retrieval configurations at equal fetch depth (`top_k`,
-default 10, overriding the production default so all three are directly comparable): dense-only
+For every query, `run_eval.py` runs five retrieval configurations at equal fetch depth (`top_k`,
+default 10, overriding the production default so all five are directly comparable): dense-only
 (`VectorStore.search` called directly), BM25-only (`ChunkRepository.search_by_keyword` called
-directly), and the full production path (`RetrievalService.retrieve`, i.e. RRF fusion + rerank).
-Each is scored with Recall@3, Recall@5, MRR (over the full fetched list, not truncated), and
-NDCG@5 (`eval/metrics/retrieval_metrics.py` — pure functions, unit-tested in `eval/tests/`,
-independent of any DB or LLM). Recall/MRR/NDCG are all defined as `None` for a query with no
-labeled relevant chunks (the out-of-corpus query) rather than counted as 0 — averaging a
-zero in for a query that has no correct answer would misrepresent an intentional non-answer as a
-retrieval failure.
+directly), a naive non-RRF hybrid (round-robin interleaving of the two ranked lists — there is no
+production code path for a non-RRF fusion, so this is the closest valid comparison, built for the
+ablation study only), RRF fusion without reranking (reusing the exact production
+`reciprocal_rank_fusion` from `app/services/retrieval/fusion.py`), and the full production path
+(`RetrievalService.retrieve`, i.e. RRF fusion + cross-encoder rerank). Each is scored with
+Recall@1/3/5/10, Precision@5/10, MRR (over the full fetched list, not truncated), and NDCG@5/10
+(`eval/metrics/retrieval_metrics.py` — pure functions, unit-tested in `eval/tests/`, independent of
+any DB or LLM). Recall/Precision/MRR/NDCG are all defined as `None` for a query with no labeled
+relevant chunks (the out-of-corpus queries) rather than counted as 0 — averaging a zero in for a
+query that has no correct answer would misrepresent an intentional non-answer as a retrieval
+failure.
+
+### Hallucination guard evaluation: a confusion matrix, no LLM call needed
+
+`evaluate_hallucination.py` evaluates whether `rag_min_rerank_score` (the guard's decline
+threshold) actually works, framed as standard binary classification: "positive" = the guard
+declines to answer. TP = an unanswerable question correctly declined; TN = an answerable question
+correctly answered; FP = an answerable question incorrectly declined (a false abstention); FN = an
+unanswerable question incorrectly answered (the guard's real failure mode — a hallucination-risk
+question got through). The guard's decision depends only on the real retrieval pipeline and the
+real cross-encoder's score, not on LLM generation at all, so this script scores the **full** labeled
+dataset for real, regardless of whether a chat backend happens to be reachable — unlike
+faithfulness/relevance/citation scoring, which do need one.
 
 ### Generation evaluation: LLM-as-judge, not NLI
 
-Faithfulness (is the answer grounded in the retrieved context?) and answer relevance (does it
-address the question?) are scored via LLM-as-judge rather than an off-the-shelf NLI model. The
-reasoning (documented at length in `eval/metrics/generation_metrics.py`'s module docstring): this
-system's answers are multi-sentence and often synthesize across more than one retrieved chunk, and
-NLI models score single (premise, hypothesis) sentence pairs — reducing an answer to sentence pairs
-and aggregating would lose exactly the cross-claim reasoning being evaluated, and adds a second
-model's calibration problems on top. An LLM judge can be given the same plain-language rubric a
-human reviewer would use and can explain *why* it scored what it scored, and this system already
-depends on an LLM chat backend for generation itself — reusing that interface for judging adds no
-new dependency. The known tradeoff, stated rather than glossed over: an LLM judge can share blind
-spots with the generation model (especially when they're the same model, as here — cost reasons,
-not a considered choice of a stronger separate judge), and its scores are noisier than a human's;
-treat these numbers as a regression signal over time, not ground truth. Both rubrics are 1–5 Likert
-scales (more reliable for an LLM to produce consistently than a raw continuous score),
-`_normalize`d to `[0, 1]`; the relevance rubric explicitly instructs the judge not to penalize an
-honest decline as irrelevant when the question genuinely can't be answered from the context.
+Faithfulness (is the answer grounded in the retrieved context?), answer relevance (does it address
+the question?), and answer correctness (does it match a known-good reference answer?) are scored
+via LLM-as-judge rather than an off-the-shelf NLI model. The reasoning (documented at length in
+`eval/metrics/generation_metrics.py`'s module docstring): this system's answers are multi-sentence
+and often synthesize across more than one retrieved chunk, and NLI models score single (premise,
+hypothesis) sentence pairs — reducing an answer to sentence pairs and aggregating would lose
+exactly the cross-claim reasoning being evaluated, and adds a second model's calibration problems
+on top. An LLM judge can be given the same plain-language rubric a human reviewer would use and can
+explain *why* it scored what it scored, and this system already depends on an LLM chat backend for
+generation itself — reusing that interface for judging adds no new dependency. The known tradeoff,
+stated rather than glossed over: an LLM judge can share blind spots with the generation model
+(especially when they're the same model, as in local mode — cost reasons, not a considered choice
+of a stronger separate judge), and its scores are noisier than a human's; treat these numbers as a
+regression signal over time, not ground truth. All three rubrics are 1–5 Likert scales (more
+reliable for an LLM to produce consistently than a raw continuous score), `_normalize`d to `[0, 1]`;
+the relevance rubric explicitly instructs the judge not to penalize an honest decline as irrelevant
+when the question genuinely can't be answered from the context, and the answer-correctness rubric
+does the same for a reference answer of `None` (the out-of-corpus queries).
 
-### Environment-aware backend selection: real vs. synthetic
+Citation correctness and completeness, by contrast, are **deterministic**, not judge-based: the
+real `extract_citations` (`app/services/rag/prompts.py`) parses the answer's `[n]` markers, and
+`citation_correctness`/`citation_completeness` (`eval/metrics/generation_metrics.py`) compare the
+cited chunk ids against the same hand-labeled `relevant_chunks` retrieval metrics use — precision
+and recall of citations against ground truth, cheaper and more reproducible than asking an LLM to
+re-derive relevance itself.
 
-`run_eval.py::detect_mode` checks `settings.openai_api_key` against `None`/empty/the
-`.env.example` placeholder (`sk-changeme`) and switches every OpenAI-backed component — embeddings,
-answer generation, and the judge — to a deterministic, offline synthetic stand-in (`eval/fakes.py`)
-rather than failing the whole harness for lack of a paid key: a hashing-trick bag-of-words
-embedding, an extractive answer generator that stitches together the most lexically-overlapping
-retrieved sentence(s) with citation markers, and a lexical-overlap heuristic judge that mimics the
-real judge's JSON output shape. **The local cross-encoder reranker and Postgres FTS need no API key
-and always run for real, in both modes** — only the OpenAI-backed legs fall back. Every report's
-`meta.mode` field and the printed summary banner say plainly which mode produced a given run's
-numbers, because they are not comparable; `eval/RESULTS.md` documents this explicitly rather than
-letting a reader mistake a synthetic-mode number for a real one.
+### Environment-aware backend selection: independently, not as one mode
+
+The embedding backend and the chat/judge backend are each selected independently based on what's
+actually reachable right now, not coupled into a single "real/local/synthetic" mode. This matters
+because `EMBEDDING_PROVIDER=local` (`sentence-transformers`) has **no runtime network dependency at
+all** — earlier revisions of this harness downgraded dense retrieval to a synthetic hashing-trick
+embedding whenever the separate Ollama *chat* service happened to be unreachable, even though the
+local embedding model needed nothing from Ollama and was fully available. Now: embeddings are real
+whenever `EMBEDDING_PROVIDER=local` is configured (always) or `=openai` with a working key; chat/
+judge are real only if Ollama actually responds to a live probe, or a real `OPENAI_API_KEY` is
+configured, falling back to a deterministic offline stand-ins (`eval/fakes.py`) otherwise — a
+hashing-trick bag-of-words embedding, an extractive answer generator that stitches together the
+most lexically-overlapping retrieved sentence(s) with citation markers, and a lexical-overlap
+heuristic judge that mimics the real judge's JSON output shape. **The local cross-encoder reranker
+and Postgres FTS need no API key and always run for real, regardless of mode.** Every report's
+`meta.embedding_mode`/`meta.chat_mode` fields and the printed summary banner say plainly which
+combination produced a given run's numbers, because a "local embeddings + synthetic chat" run's
+retrieval numbers and generation numbers are not both real or both synthetic —
+`eval/RESULTS.md` documents this explicitly rather than letting a reader mistake one half for the
+other.
 
 ### A real finding, not a synthetic artifact: `rag_min_rerank_score` was uncalibrated — now fixed
 
@@ -1371,16 +1418,20 @@ this threshold again with more evidence, rather than treating `-3.0` as any less
 
 ```bash
 cd backend
-uv run pytest ../eval/tests           # metrics module unit tests — fast, no infra needed
-uv run python ../eval/run_eval.py     # full harness — needs a migrated Postgres + Qdrant
+uv run pytest ../eval/tests                    # metrics module unit tests — fast, no infra needed
+uv run python ../eval/run_all.py               # every phase except generation — needs Postgres + Qdrant
+uv run python ../eval/run_all.py --generation-sample 20   # also run real generation on a sample
+uv run python ../eval/generate_final_report.py # renders results/final_report.json -> FINAL_REPORT.md
 ```
 
-Wired into CI as a separate `eval` job on `.github/workflows/ci.yml`, gated to `workflow_dispatch`
-only (not every push/PR) — a real-mode run makes on the order of 40 OpenAI calls across the
-dataset (embeddings + generation + judge), which is real cost and latency for a signal that
-doesn't change every commit, unlike the main `backend`/`frontend` jobs. An optional
-`OPENAI_API_KEY` repository secret switches that job to real mode; left unset, it still completes
-in synthetic mode and uploads its JSON report as a build artifact either way.
+Each phase (retrieval, hallucination guard, latency, generation) is also independently runnable —
+see `eval/README.md`. Wired into CI as a separate `eval` job on `.github/workflows/ci.yml`, gated
+to `workflow_dispatch` only (not every push/PR) — a real-mode generation run makes real LLM calls
+across the dataset, which is real cost/latency for a signal that doesn't change every commit,
+unlike the main `backend`/`frontend` jobs. An optional `OPENAI_API_KEY` repository secret switches
+generation to real mode; left unset, retrieval/hallucination/latency/tests still run for real
+(they need no OpenAI key), and generation is skipped rather than run in a misleading synthetic
+mode by default in CI.
 
 ## Configurable LLM & embedding providers
 
@@ -1668,19 +1719,22 @@ exists; conversational RAG — query rewriting, grounded + cited + streamed answ
 chat UI — exists; production hardening — per-user rate limiting, a documented security
 posture, request-id tracing across the sync/async boundary, Prometheus metrics, and graceful
 degradation when a downstream dependency is unavailable — exists; a labeled retrieval +
-generation evaluation harness, run against the real pipeline in three retrieval configurations and
-reporting Recall@K/MRR/NDCG and LLM-as-judge faithfulness/relevance, with results documented
-honestly including a real calibration finding it surfaced — exists (§ Evaluation
-methodology); a production deployment configuration — hardened compose file, automatic migrations,
-image build/push CI, and a justified single-VM deployment target — exists (§ Production
-deployment). **This completes the project's originally planned scope.** Still deferred, honestly
-rather than silently: a per-document, page-addressable viewer for citation chips to deep-link to
-(they expand in place instead — see § Conversational RAG); conversation deletion (create/list/select
-exist, no delete UI or endpoint yet); older-turn summarization instead of the current hard cutoff at
-`rag_history_max_turns`; a second, subtler hallucination-mitigation layer beyond the rerank-score
-threshold + prompt instruction (topically-relevant-but-insufficient context isn't caught
-deterministically; the threshold itself was recalibrated from evidence, but still rests
-on a single labeled negative example — see § Evaluation methodology); CSRF tokens beyond
+generation evaluation harness, run against the real pipeline in five retrieval configurations,
+a real hallucination guard confusion matrix, real latency benchmarking, and LLM-as-judge
+faithfulness/relevance/answer-correctness plus deterministic citation metrics, with results
+documented honestly including real calibration findings and real bugs it surfaced — exists
+(§ Evaluation methodology); a production deployment configuration — hardened compose file,
+automatic migrations, image build/push CI, and a justified single-VM deployment target — exists
+(§ Production deployment). **This completes the project's originally planned scope.** Still
+deferred, honestly rather than silently: a per-document, page-addressable viewer for citation
+chips to deep-link to (they expand in place instead — see § Conversational RAG); conversation
+deletion (create/list/select exist, no delete UI or endpoint yet); older-turn summarization
+instead of the current hard cutoff at `rag_history_max_turns`; a second, subtler
+hallucination-mitigation layer beyond the rerank-score threshold + prompt instruction
+(topically-relevant-but-insufficient context isn't caught deterministically — the hallucination
+guard's real confusion matrix, 110 queries/11 negatives, shows exactly this failure mode: 3 of
+11 unanswerable questions still got answered because the reranker scored topically-similar-but-
+wrong content confidently — see § Evaluation methodology); CSRF tokens beyond
 `SameSite`; refresh-token-reuse detection/alerting; S3 storage (the abstraction is in place; no
 second implementation exists yet); table/blockquote-aware Markdown parsing (folded into plain
 paragraphs today); PDF outline/bookmark-based heading detection (font-size heuristic only today);

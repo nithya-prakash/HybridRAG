@@ -60,6 +60,20 @@ def ndcg_at_k[T: Hashable](retrieved: Sequence[T], relevant: set[T], k: int) -> 
     return dcg / idcg if idcg > 0 else 0.0
 
 
+def precision_at_k[T: Hashable](retrieved: Sequence[T], relevant: set[T], k: int) -> float:
+    """Fraction of the top k retrieved ids that are relevant. Undefined
+    (returns None) when `relevant` is empty, for the same reason as
+    `recall_at_k` — there's no meaningful precision judgment to make about a
+    query with no correct answer.
+    """
+    if not relevant:
+        return None
+    if k <= 0:
+        return 0.0
+    hits = len(set(retrieved[:k]) & relevant)
+    return hits / min(k, len(retrieved)) if retrieved else 0.0
+
+
 def mean_over_queries(values: Sequence[float | None]) -> tuple[float, int]:
     """Average a per-query metric, skipping queries where it was undefined
     (empty relevant set). Returns (mean, number_of_queries_included) so
