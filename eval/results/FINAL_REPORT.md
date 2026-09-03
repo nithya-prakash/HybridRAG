@@ -49,17 +49,17 @@ Note: on this dataset the naive (non-RRF) hybrid slightly **outperforms** RRF on
 
 ## Generation
 
-Real generation on a **10-query category-stratified sample** (chat backend `ollama:llama3.2:3b`, judge `ollama:llama3.2:3b (same model as generation — a small local model judging its own output; see eval/RESULTS.md's caveat on this)`) — see Limitations for why this is a sample rather than the full dataset.
+Real generation on a **20-query category-stratified sample** (chat backend `ollama:llama3.2:3b`, judge `ollama:llama3.2:3b (same model as generation — a small local model judging its own output; see eval/RESULTS.md's caveat on this)`) — see Limitations for why this is a sample rather than the full dataset.
 
 | Metric | All queries | Answered only |
 |---|---|---|
-| Faithfulness (groundedness) | 0.719 | 0.958 |
-| Relevance | 0.750 | 0.667 |
-| Answer correctness | 0.812 | 0.792 |
+| Faithfulness (groundedness) | 0.645 | 0.719 |
+| Relevance | 0.947 | 0.938 |
+| Answer correctness | 0.763 | 0.719 |
 
-- **Citation correctness:** 1.000 (n=4 answers with ≥1 citation)
-- **Citation completeness:** 0.571 (n=7 queries with a labeled-relevant chunk)
-- **Abstention correct:** 7/10
+- **Citation correctness:** 0.788 (n=11 answers with ≥1 citation)
+- **Citation completeness:** 0.656 (n=16 queries with a labeled-relevant chunk)
+- **Abstention correct:** 17/20
 
 Judge model/prompt: see `eval/metrics/generation_metrics.py` (`FAITHFULNESS_RUBRIC`, `RELEVANCE_RUBRIC`, `ANSWER_CORRECTNESS_RUBRIC`) — the judge is the same chat backend as generation (see Limitations on shared-blind-spot risk). These are LLM-as-judge scores, not ground truth.
 

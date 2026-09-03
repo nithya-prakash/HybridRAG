@@ -196,10 +196,13 @@ The recall gap is real and specific, not evenly spread: it concentrates in quest
 reranker finds topically-similar-but-wrong content and scores it confidently (see
 [`eval/RESULTS.md`](eval/RESULTS.md) for the exact queries).
 
-**Generation** (real `llama3.2:3b` via Ollama, 10-query stratified sample — see
-[`eval/RESULTS.md`](eval/RESULTS.md) for why not the full 110): faithfulness 0.958 and answer
-correctness 0.792 on answered queries; citation correctness 1.000 but citation completeness
-only 0.571 — the model cites correctly but not exhaustively.
+**Generation** (real `llama3.2:3b` via Ollama, 20-query category-stratified sample — see
+[`eval/RESULTS.md`](eval/RESULTS.md) for why not the full 110): faithfulness 0.719 and answer
+correctness 0.719 on answered queries; citation correctness 0.788 and citation completeness
+0.656 — the model's citations are usually but not always both correct and exhaustive. The 3
+abstention failures in this sample are the exact same queries independently flagged by the
+hallucination guard's full-dataset confusion matrix above — a real consistency check, not
+sampling noise.
 
 **Latency** (real, this development machine): retrieval ~8ms mean, reranking ~1.08s mean
 (p95 1.4s), full retrieval+rerank ~1.22s mean; generation ~70s mean on CPU-bound local

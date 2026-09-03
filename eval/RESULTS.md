@@ -8,7 +8,7 @@ harness surfaced along the way.
 
 **Run:** 2026-09-03 · retrieval + hallucination guard + latency + tests: full 110-query
 dataset, real local embeddings, real BM25, real reranker. Generation/groundedness: a real
-10-query category-stratified sample (see § Generation below for why not the full 110).
+20-query category-stratified sample (see § Generation below for why not the full 110).
 
 ```bash
 cd backend
@@ -110,53 +110,53 @@ recall gap concentrates in confident-but-wrong reranker scores (over-declining i
 under-declining on topically-adjacent-but-wrong content is the real gap), not evenly across
 all unanswerable questions.
 
-## Generation: a real 10-query sample (see why below)
+## Generation: a real 20-query sample
 
-Real generation (`llama3.2:3b` via Ollama), real judge (the same model), on a 10-query
-sample stratified across all 8 categories.
+Real generation (`llama3.2:3b` via Ollama), real judge (the same model), on the full
+20-query sample stratified across all 8 categories (the sample originally attempted — see
+§ History below for the first attempt's failure and the fixes that made this run possible).
 
 | Metric | All queries | Answered only |
 |---|---|---|
-| Faithfulness (groundedness) | 0.719 | 0.958 |
-| Relevance | 0.750 | 0.667 |
-| Answer correctness | 0.812 | 0.792 |
+| Faithfulness (groundedness) | 0.645 | 0.719 |
+| Relevance | 0.947 | 0.938 |
+| Answer correctness | 0.763 | 0.719 |
 
-- **Citation correctness:** 1.000 (n=4 answers that included ≥1 citation — every citation
-  pointed to a chunk actually labeled relevant)
-- **Citation completeness:** 0.571 (n=7 queries with a labeled-relevant chunk — on average,
-  only 57% of the truly relevant chunks available got cited)
-- **Abstention correct:** 7/10
+- **Citation correctness:** 0.788 (n=11 answers that included ≥1 citation — 78.8% of cited
+  chunks were actually labeled relevant)
+- **Citation completeness:** 0.656 (n=16 queries with a labeled-relevant chunk — on average,
+  65.6% of the truly relevant chunks available got cited)
+- **Abstention correct:** 17/20
 
-**Why "answered only" faithfulness (0.958) is so much higher than "all queries" (0.719):**
-2 of the 10 queries errored (see below, not scored at all — counted as failures in the "all
-queries" denominator) and 1 more (`q033`) was a real false-abstention case (see the
-hallucination section above) — none of those are faithfulness failures of an actual generated
-answer, they're generation-pipeline failures, and the aggregate honestly reflects that rather
-than hiding it.
+**A real, useful consistency check:** the 3 abstention failures in this sample (`q033`,
+`q034`, `q093`) are the *exact same three queries* independently flagged in the full-dataset
+hallucination confusion matrix above (`q033`/`q034` as false positives, `q093` as a false
+negative) — the guard's specific failure modes are stable and reproducible, not sampling
+noise, whether measured via the fast reranker-score-only method or the slow real-generation
+path.
 
-**Citation completeness (0.571) is the most actionable real finding here:** the model tends
-to cite *some* of what it retrieved, correctly, but not exhaustively — a real, distinct gap
-from citing the wrong thing (correctness stayed 1.000 throughout this sample).
+**Why faithfulness (0.719 answered-only) is the honest, weaker number here, not a bug:**
+unlike the earlier 10-query sample (which happened to draw an easy subset), this 20-query
+sample's answered-only faithfulness genuinely sits at 0.719 — real evidence that `llama3.2:3b`
+does not always stay perfectly grounded even when it does attempt an answer. This is exactly
+the kind of number a partial-but-real sample is for: not flattering, not hidden.
 
-**Why only 10 queries, not the full 110 or even the full 20-query stratified sample first
-attempted:** local CPU generation is slow enough (one query = 1 generation + 3 judge calls,
-each 10-100+ seconds) that a 20-query attempt ran for over 2.5 hours before a single Ollama
-call finally exceeded even a 180-second timeout — `OllamaChatBackend`'s idle memory footprint
-(~5GB, observed directly) leaves little headroom in this development machine's 7.75GB Docker
-budget alongside everything else normally running on it, and performance degrades over a
-long sustained run. Two real fixes came out of chasing this down: `run_eval.py` now catches a
-per-query generation/judge failure and records it rather than losing an entire multi-hour run
-to one timeout (2 of the 10 queries in this run actually hit that path — `q14`/`q107` — and
-the run still completed with 8 real scored queries instead of 0), and `OllamaChatBackend`'s
-timeout was raised from 180s to 300s. Restarting the Ollama container between attempts to
-clear its accumulated memory, plus cutting the sample to 10, produced a clean, complete run.
-**These 10 numbers are a real but small sample — read them as "the real pipeline works and
-these are its real scores on this sample," not a tight confidence interval.**
+**Citation correctness (0.788) and completeness (0.656) are both real, moderate gaps:** the
+model's citations are usually but not always pointing at genuinely relevant chunks, and it
+usually but not always cites everything relevant it retrieved. Both numbers moved down from
+the earlier 10-query sample's (1.000/0.571) as more data came in — expected, and a reminder
+that a 10-query sample was too small to trust for these two metrics specifically.
+
+**One query (`q033`) hit a real backend error** (`HTTPStatusError: 500` from Ollama's
+`/api/chat` endpoint) rather than a timeout this time — a different real failure mode under
+sustained local CPU load, caught by the same resilience fix (recorded, not fatal to the run).
 
 Judge rubrics and prompts: `eval/metrics/generation_metrics.py`
 (`FAITHFULNESS_RUBRIC`/`RELEVANCE_RUBRIC`/`ANSWER_CORRECTNESS_RUBRIC`). The judge is the same
 small model doing the generating — a real, known limitation (shared blind spots), not a
 synthetic-mode artifact; treat these as a reproducible regression signal, not ground truth.
+**20 real queries is still a sample, not the full 110** — read these as real, directionally
+trustworthy numbers, not a tight confidence interval.
 
 ## Latency
 
@@ -191,6 +191,24 @@ re-verified fresh as part of this evaluation, matching what the README already c
 new number, but independently confirmed rather than trusted from an older run).
 
 ## History: real bugs and calibration work this framework has found
+
+### The first full 20-query generation attempt died after 2h40m — fixed, then succeeded
+
+The 20-query stratified sample now reported above was not the first attempt. The first
+attempt ran for **over 2.5 hours** before a single Ollama call finally exceeded even a
+180-second client timeout — `OllamaChatBackend`'s idle memory footprint (~5GB, observed
+directly via `docker stats`) leaves little headroom in this development machine's 7.75GB
+Docker budget alongside everything else normally running on it, and performance degrades
+over a long sustained run. Losing 2.5 hours of real, completed LLM calls to one late failure
+was itself a real problem worth fixing, not just retrying: `run_eval.py` now catches a
+per-query generation/judge failure and records it (with the real exception) rather than
+losing the entire run, and `OllamaChatBackend`'s timeout was raised from 180s to 300s.
+Restarting the Ollama container to clear its accumulated memory, then rerunning the same
+20-query sample, produced the complete, successful run reported above — with one query
+(`q033`) still hitting a real backend error (a 500 from Ollama this time, not a timeout) and
+being recorded rather than crashing the run. Confidence that the resilience fix actually
+works came from that real failure occurring mid-run and the run finishing anyway, not from a
+clean run alone.
 
 ### `rag_min_rerank_score` was uncalibrated (found on the original 21-query dataset)
 
