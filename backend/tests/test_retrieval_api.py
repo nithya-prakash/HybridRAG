@@ -1,14 +1,13 @@
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from app.core.vector_store import EmbeddedChunk, get_vector_store
-from app.main import app
 from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.document_repository import DocumentRepository
 from app.services.parsing.models import Chunk as ParsedChunk
-from tests.helpers import FakeEmbeddingBackend, fake_embed
+from tests.helpers import FakeEmbeddingBackend, fake_embed, new_client
 
 PASSWORD = "correcthorsebattery"
 
@@ -100,7 +99,7 @@ async def test_search_scopes_results_to_authenticated_user(client: AsyncClient, 
     owner_id = await _register_and_login(client, "api-owner@example.com")
     await _index_for_user(db_session, owner_id, CORPUS, "owner.txt")
 
-    intruder = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    intruder = await new_client()
     try:
         await _register_and_login(intruder, "api-intruder@example.com")
 

@@ -8,6 +8,7 @@ import { ConversationSidebar } from "@/components/ConversationSidebar";
 import { useAuth } from "@/lib/auth-context";
 import {
   createConversation,
+  deleteConversation,
   getConversation,
   listConversations,
   streamMessage,
@@ -24,6 +25,7 @@ export default function ChatPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loadingConversation, setLoadingConversation] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +67,17 @@ export default function ChatPage() {
       setSelectedId(conversation.id);
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    try {
+      await deleteConversation(id);
+      setConversations((prev) => prev.filter((c) => c.id !== id));
+      setSelectedId((current) => (current === id ? null : current));
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -127,7 +140,9 @@ export default function ChatPage() {
         selectedId={selectedId}
         onSelect={setSelectedId}
         onNew={handleNew}
+        onDelete={handleDelete}
         creating={creating}
+        deletingId={deletingId}
       />
       <div className="min-w-0 flex-1">
         <div>

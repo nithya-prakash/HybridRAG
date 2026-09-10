@@ -73,6 +73,14 @@ class ConversationRepository:
         await self._session.flush()
         return message
 
+    async def delete(self, conversation: Conversation) -> None:
+        # Conversation.messages carries cascade="all, delete-orphan" (and
+        # messages.conversation_id has ON DELETE CASCADE at the DB level as
+        # a backstop) — no separate message cleanup needed, unlike
+        # DocumentRepository.delete's Qdrant vectors, which have no FK to
+        # lean on.
+        await self._session.delete(conversation)
+
     async def set_title(self, conversation: Conversation, title: str) -> None:
         conversation.title = title
         await self._session.flush()

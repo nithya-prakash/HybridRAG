@@ -118,19 +118,24 @@ class Settings(BaseSettings):
     rag_history_max_turns: int = 10
     # Below this cross-encoder rerank score, retrieved context is treated as
     # not actually relevant and the assistant declines rather than guessing.
-    # Calibrated against the Phase 8 eval dataset (eval/RESULTS.md), not
-    # picked blind: the cross-encoder's raw output is an unbounded logit, not
-    # a 0-1 probability, so 0.0 (the original guess) turned out to reject a
-    # genuinely correct top-1 match that scored -1.64. Across the labeled
-    # dataset, true positives ranged -1.64 to +10.25 and the one labeled
-    # negative (an out-of-corpus query) scored -9.85 — -3.0 clears every
-    # observed true positive with margin (~1.4) while staying well clear
-    # (~6.8) of the one observed negative, deliberately not pushed as low as
-    # that single negative example alone would allow: this is still a
-    # heuristic threshold on an uncalibrated score, and n=1 negative example
-    # isn't enough to trust the full gap down to -9.85 as safe. Re-tune as
-    # the eval dataset grows with more labeled negatives.
-    rag_min_rerank_score: float = -3.0
+    # Recalibrated against the full 110-query/11-negative hallucination-guard
+    # eval (eval/evaluate_hallucination.py, eval/RESULTS.md) — a proper
+    # threshold sweep over every observed score (not a guess) found -3.3 sits
+    # in a genuine gap in the real distribution: q034 (an answerable query,
+    # incorrectly declined at the prior -3.0 threshold) scored -3.1147, while
+    # the nearest true negative (q096, unanswerable) scored -3.475 — -3.3
+    # sits roughly at the midpoint, clearing q034 with margin (~0.19) while
+    # staying clear of q096 (~0.17). This improves accuracy 95.5%->96.4%,
+    # precision 80.0%->88.9%, F1 0.762->0.800 versus the prior -3.0, with NO
+    # threshold able to improve recall (72.7%) without a worse F1 trade-off:
+    # the sweep confirmed two of the three false negatives (q089 +3.27,
+    # q094 +4.81) score *higher* than many genuinely answerable queries, so
+    # no cutoff on this score alone separates them — those are a real,
+    # different failure mode (topically-similar-but-not-specific content
+    # scored confidently), addressed instead by the second-layer prompt
+    # constraint in app/services/rag/prompts.py rather than by this
+    # threshold. Re-tune as the eval dataset grows further.
+    rag_min_rerank_score: float = -3.3
     rag_max_completion_tokens: int = 800
 
     # Observability

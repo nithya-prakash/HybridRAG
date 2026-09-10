@@ -155,9 +155,12 @@ unanswerable, across 8 question categories.
 | Dense + BM25 + RRF + Reranker | **0.929** | 1.000 | **0.980** | **0.986** |
 
 **Hallucination guard** (full dataset, real retrieval + reranker score, no LLM call):
-**95.5% accuracy**, 80.0% precision, 72.7% recall, F1 0.762 — TP=8, TN=97, FP=2, FN=3. The
-recall gap concentrates in questions where the reranker scores topically-similar-but-wrong
-content confidently (see `eval/RESULTS.md` for the exact queries).
+**96.4% accuracy**, 88.9% precision, 72.7% recall, F1 0.800 — TP=8, TN=98, FP=1, FN=3
+(recalibrated from an exhaustive threshold sweep over the full labeled distribution — see
+`eval/RESULTS.md` for the sweep and why recall specifically can't move from a threshold change
+alone). The remaining recall gap concentrates in questions where the reranker scores
+topically-similar-but-wrong content confidently (see `eval/RESULTS.md` for the exact queries
+and the second-layer prompt constraint added to address it directly).
 
 **Generation** (real `llama3.2:3b` via Ollama, 20-query stratified sample): faithfulness 0.719
 and answer correctness 0.719 on answered queries; citation correctness 0.788, completeness
@@ -167,7 +170,7 @@ guard's confusion matrix flagged independently — a real cross-method consisten
 **Latency:** retrieval ~8ms mean, reranking ~1.08s mean (p95 1.4s), generation ~70s mean on
 CPU-bound local `llama3.2:3b` (a hosted API or GPU inference would be much faster).
 
-**Testing:** 209 tests, 0 failed, 97% code coverage.
+**Testing:** 219 tests, 0 failed, 97% code coverage.
 
 ## Design decisions
 
@@ -189,6 +192,9 @@ Full depth in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Highlights:
   `user_id` and filters on it — no "search everything" method exists to call by accident.
 - **Fail fast on insecure production config.** The app refuses to start outside local/test
   with the default JWT secret or a wildcard CORS origin.
+- **CSRF defense-in-depth beyond `SameSite`.** A double-submit-cookie token, issued
+  non-httpOnly specifically so same-origin JS can echo it back as a header — the property that
+  defeats a cross-site attacker, who can't read a victim's cookies at all.
 
 ## Deployment
 
@@ -230,7 +236,5 @@ is a documented manual step (no real target host in this repo to test auto-deplo
 The full planned scope is complete — see [`docs/PROGRESS.md`](docs/PROGRESS.md) for the full
 history and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the technical design. Explicitly
 deferred, not silently omitted (see `ARCHITECTURE.md`'s "What's deliberately deferred"): S3
-storage, a TLS-terminating reverse proxy, Kubernetes/multi-region deployment, conversation
-deletion, CSRF tokens beyond `SameSite`, and a second hallucination-mitigation layer beyond the
-rerank-score threshold (the guard's confusion matrix — see § Evaluation — shows its actual
-gap: topically-similar-but-wrong content occasionally scores confidently enough to slip past).
+storage, a TLS-terminating reverse proxy, and Kubernetes/multi-region deployment (all a
+deliberate single-VM scope choice, not a gap — see § Deployment).

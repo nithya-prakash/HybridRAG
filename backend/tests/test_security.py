@@ -1,14 +1,12 @@
 import httpx
 import openai
 import pytest
-from httpx import ASGITransport, AsyncClient
 from qdrant_client.http.exceptions import ResponseHandlingException
 
 from app.core.config import Settings
 from app.core.startup_checks import InsecureConfigurationError, validate_production_settings
 from app.core.vector_store import VectorStore
-from app.main import app
-from tests.helpers import FakeEmbeddingBackend
+from tests.helpers import FakeEmbeddingBackend, new_client
 
 PASSWORD = "correcthorsebattery"
 
@@ -166,11 +164,13 @@ async def test_unexpected_exception_returns_500_with_generic_message(monkeypatch
     # inspect. Only this one test opts out — every other test in this suite
     # keeps the default, so a genuinely-unexpected exception elsewhere still
     # fails loudly instead of being silently downgraded to a response.
-    transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://test") as isolated_client:
+    isolated_client = await new_client(raise_app_exceptions=False)
+    try:
         await _register_and_login(isolated_client, "security-unexpected-error@example.com")
 
         resp = await isolated_client.post("/retrieval/search", json={"query": "anything at all"})
+    finally:
+        await isolated_client.aclose()
 
     assert resp.status_code == 500
     assert resp.json() == {"detail": "Internal server error."}
@@ -201,8 +201,8 @@ async def test_unexpected_exception_response_still_carries_cors_and_tracing_head
         lambda: type("Boom", (), {"embed_batch": _boom})(),
     )
 
-    transport = ASGITransport(app=app, raise_app_exceptions=False)
-    async with AsyncClient(transport=transport, base_url="http://test") as isolated_client:
+    isolated_client = await new_client(raise_app_exceptions=False)
+    try:
         await _register_and_login(isolated_client, "security-500-headers@example.com")
 
         resp = await isolated_client.post(
@@ -210,6 +210,8 @@ async def test_unexpected_exception_response_still_carries_cors_and_tracing_head
             json={"query": "anything at all"},
             headers={"Origin": "http://localhost:3000"},
         )
+    finally:
+        await isolated_client.aclose()
 
     assert resp.status_code == 500
     assert resp.headers.get("access-control-allow-origin") == "http://localhost:3000"

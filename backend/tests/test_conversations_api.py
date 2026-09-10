@@ -2,16 +2,17 @@ import json
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from qdrant_client.http.exceptions import ResponseHandlingException
+from sqlalchemy import select
 
 from app.core.vector_store import EmbeddedChunk, get_vector_store
-from app.main import app
+from app.models.message import Message
 from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.document_repository import DocumentRepository
 from app.services.parsing.models import Chunk as ParsedChunk
 from app.services.rag.prompts import INSUFFICIENT_CONTEXT_MESSAGE
-from tests.helpers import FakeEmbeddingBackend, fake_embed
+from tests.helpers import FakeEmbeddingBackend, fake_embed, new_client
 from tests.test_conversation_service import FakeChatBackend
 
 PASSWORD = "correcthorsebattery"
@@ -133,7 +134,7 @@ async def test_get_another_users_conversation_returns_404(client: AsyncClient):
     await _register_and_login(client, "conv-owner@example.com")
     conversation_id = (await client.post("/conversations")).json()["id"]
 
-    intruder = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    intruder = await new_client()
     try:
         await _register_and_login(intruder, "conv-intruder@example.com")
         resp = await intruder.get(f"/conversations/{conversation_id}")
@@ -260,6 +261,60 @@ async def test_post_message_streams_error_event_when_downstream_unavailable(
     assert "ResponseHandlingException" not in resp.text
     assert "simulated Qdrant outage" not in resp.text
     assert "done" not in [e for e, _ in events]
+
+
+async def test_delete_conversation_removes_it_from_the_list(client: AsyncClient):
+    await _register_and_login(client, "conv-delete@example.com")
+    conversation_id = (await client.post("/conversations")).json()["id"]
+
+    resp = await client.delete(f"/conversations/{conversation_id}")
+
+    assert resp.status_code == 204
+    list_resp = await client.get("/conversations")
+    assert conversation_id not in [c["id"] for c in list_resp.json()]
+    assert (await client.get(f"/conversations/{conversation_id}")).status_code == 404
+
+
+async def test_delete_conversation_also_deletes_its_messages(client: AsyncClient, db_session):
+    user_id = await _register_and_login(client, "conv-delete-cascade@example.com")
+    await _index_for_user(db_session, user_id, CORPUS, "policy.txt")
+    conversation_id = (await client.post("/conversations")).json()["id"]
+    await client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"content": "What is the meal reimbursement cap?"},
+    )
+
+    resp = await client.delete(f"/conversations/{conversation_id}")
+
+    assert resp.status_code == 204
+    result = await db_session.execute(
+        select(Message).where(Message.conversation_id == uuid.UUID(conversation_id))
+    )
+    assert result.scalars().all() == []
+
+
+async def test_delete_nonexistent_conversation_returns_404(client: AsyncClient):
+    await _register_and_login(client, "conv-delete-404@example.com")
+
+    resp = await client.delete(f"/conversations/{uuid.uuid4()}")
+
+    assert resp.status_code == 404
+
+
+async def test_delete_another_users_conversation_returns_404(client: AsyncClient):
+    await _register_and_login(client, "conv-delete-owner@example.com")
+    conversation_id = (await client.post("/conversations")).json()["id"]
+
+    intruder = await new_client()
+    try:
+        await _register_and_login(intruder, "conv-delete-intruder@example.com")
+        resp = await intruder.delete(f"/conversations/{conversation_id}")
+        assert resp.status_code == 404
+    finally:
+        await intruder.aclose()
+
+    # Confirmed not actually deleted by the failed attempt above.
+    assert (await client.get(f"/conversations/{conversation_id}")).status_code == 200
 
 
 async def test_post_message_streams_error_event_on_unexpected_exception(

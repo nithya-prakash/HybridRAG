@@ -162,12 +162,19 @@ returned to be stored in `localStorage`. Reasoning:
   stop. `httpOnly` cookies are invisible to `document.cookie` and to any JS, injected or not —
   they're never in a place a script could read them.
 - The tradeoff is CSRF, not XSS: a cookie is sent automatically on any request to the domain,
-  including ones triggered by a malicious third-party site. This is mitigated by `SameSite=Lax`
-  (blocks cookies on cross-site `POST`/fetch, only sends them on top-level navigation) plus CORS
-  restricted to the exact frontend origin (`cors_origins` in `backend/.env.example`) with
-  `allow_credentials=True`. This is a baseline, not the final story — a double-submit CSRF token
-  is the natural next step in a future hardening pass, same "down payment" framing as rate
-  limiting below.
+  including ones triggered by a malicious third-party site. `SameSite=Lax` (blocks cookies on
+  cross-site `POST`/fetch, only sends them on top-level navigation) plus CORS restricted to the
+  exact frontend origin (`cors_origins` in `backend/.env.example`) with `allow_credentials=True`
+  already block the classic attack in current browsers. `CsrfMiddleware` (`app/core/csrf.py`)
+  adds real defense-in-depth on top: a double-submit-cookie token, issued as a *non-httpOnly*
+  cookie (deliberately — same-origin JS must be able to read it back as a request header, the
+  exact property that defeats a cross-site attacker, who can't read a victim's cookies at all)
+  and required as a matching `X-CSRF-Token` header on every unsafe-method request. Covers the
+  gap `SameSite` alone doesn't: browsers/webviews that don't honor it correctly, and any future
+  misconfiguration that weakens it (e.g. `cookie_samesite=none` for a legitimate cross-subdomain
+  need). Tested directly in `backend/tests/test_csrf.py` — missing/mismatched token rejected
+  with 403, matching token passes, and the 403 itself still carries CORS headers (placed inside
+  the same outer CORS wrap as the unhandled-exception path above, for the same reason).
 - The refresh token cookie is additionally scoped with `Path=/auth`, so it's never sent on
   requests outside the auth routes — it doesn't need to be, and narrowing its blast radius is
   free.
@@ -1725,17 +1732,14 @@ faithfulness/relevance/answer-correctness plus deterministic citation metrics, w
 documented honestly including real calibration findings and real bugs it surfaced — exists
 (§ Evaluation methodology); a production deployment configuration — hardened compose file,
 automatic migrations, image build/push CI, and a justified single-VM deployment target — exists
-(§ Production deployment). **This completes the project's originally planned scope.** Still
-deferred, honestly rather than silently: a per-document, page-addressable viewer for citation
-chips to deep-link to (they expand in place instead — see § Conversational RAG); conversation
-deletion (create/list/select exist, no delete UI or endpoint yet); older-turn summarization
-instead of the current hard cutoff at `rag_history_max_turns`; a second, subtler
-hallucination-mitigation layer beyond the rerank-score threshold + prompt instruction
-(topically-relevant-but-insufficient context isn't caught deterministically — the hallucination
-guard's real confusion matrix, 110 queries/11 negatives, shows exactly this failure mode: 3 of
-11 unanswerable questions still got answered because the reranker scored topically-similar-but-
-wrong content confidently — see § Evaluation methodology); CSRF tokens beyond
-`SameSite`; refresh-token-reuse detection/alerting; S3 storage (the abstraction is in place; no
+(§ Production deployment); CSRF protection beyond `SameSite` (a double-submit-cookie token —
+see § Authentication & multi-tenancy) and conversation deletion (repository/service/endpoint/UI,
+with cascade-delete of its messages) both exist. **This completes the project's originally
+planned scope.** Still deferred, honestly rather than silently: a per-document,
+page-addressable viewer for citation chips to deep-link to (they expand in place instead — see
+§ Conversational RAG); older-turn summarization instead of the current hard cutoff at
+`rag_history_max_turns`; refresh-token-reuse detection/alerting; S3 storage (the abstraction is
+in place; no
 second implementation exists yet); table/blockquote-aware Markdown parsing (folded into plain
 paragraphs today); PDF outline/bookmark-based heading detection (font-size heuristic only today);
 Qdrant collection recovery if a worker crashes mid-`replace_for_document` between the delete and

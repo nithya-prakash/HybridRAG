@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError, parseErrorDetail } from "./api";
+import { API_BASE_URL, ApiError, csrfHeaders, parseErrorDetail } from "./api";
 
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 
@@ -18,6 +18,7 @@ async function documentsFetch(path: string, init?: RequestInit): Promise<Respons
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     credentials: "include",
+    headers: { ...csrfHeaders(), ...init?.headers },
   });
   if (!res.ok) {
     throw new ApiError(res.status, await parseErrorDetail(res));

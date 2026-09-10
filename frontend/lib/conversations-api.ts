@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError, parseErrorDetail } from "./api";
+import { API_BASE_URL, ApiError, csrfHeaders, parseErrorDetail } from "./api";
 
 export interface Conversation {
   id: string;
@@ -33,7 +33,11 @@ export interface ConversationDetail {
 }
 
 async function conversationsFetch(path: string, init?: RequestInit): Promise<Response> {
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...init, credentials: "include" });
+  const res = await fetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: { ...csrfHeaders(), ...init?.headers },
+  });
   if (!res.ok) {
     throw new ApiError(res.status, await parseErrorDetail(res));
   }
@@ -53,6 +57,10 @@ export async function createConversation(): Promise<Conversation> {
 export async function getConversation(id: string): Promise<ConversationDetail> {
   const res = await conversationsFetch(`/conversations/${id}`, { cache: "no-store" });
   return res.json();
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  await conversationsFetch(`/conversations/${id}`, { method: "DELETE" });
 }
 
 export interface CitationsPayload {
@@ -85,7 +93,7 @@ export async function streamMessage(
     res = await fetch(`${API_BASE_URL}/conversations/${conversationId}/messages`, {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...csrfHeaders() },
       body: JSON.stringify({ content }),
     });
   } catch {

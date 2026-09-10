@@ -3,11 +3,11 @@ import uuid
 from datetime import UTC, datetime
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
 from app.core.config import get_settings
 from app.core.vector_store import EmbeddedChunk, get_vector_store
-from app.main import app
+from tests.helpers import new_client
 
 PASSWORD = "correcthorsebattery"
 
@@ -27,7 +27,7 @@ async def _register_and_login(client: AsyncClient, email: str) -> None:
 
 
 async def _second_client(email: str) -> AsyncClient:
-    c = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    c = await new_client()
     await _register_and_login(c, email)
     return c
 

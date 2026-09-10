@@ -98,6 +98,11 @@ class ConversationService:
             raise ConversationNotFoundError(conversation_id)
         return conversation
 
+    async def delete_conversation(self, user_id: uuid.UUID, conversation_id: uuid.UUID) -> None:
+        conversation = await self.require_conversation(user_id, conversation_id)
+        await self._conversations.delete(conversation)
+        await self._session.commit()
+
     async def get_conversation_with_messages(
         self, user_id: uuid.UUID, conversation_id: uuid.UUID
     ) -> tuple[Conversation, list[Message]]:

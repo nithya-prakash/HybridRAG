@@ -1,6 +1,6 @@
 # HybridRAG Evaluation — Final Report
 
-Generated: 2026-09-03T17:30:33.729013+00:00
+Generated: 2026-09-10T19:46:45.008773+00:00
 
 Every number in this report comes from actually running the scripts in `eval/` against this repository's real retrieval and generation pipeline — see each section for the exact command that reproduces it. Nothing here is estimated or hand-typed.
 
@@ -29,7 +29,7 @@ Real local embeddings (`local:BAAI/bge-small-en-v1.5`), real BM25 (Postgres full
 | Method | Recall@1 | Recall@5 | Recall@10 | MRR | NDCG@5 | NDCG@10 | Precision@5 |
 |---|---|---|---|---|---|---|---|
 | Dense only | 0.924 | 0.995 | 1.000 | 0.976 | 0.979 | 0.981 | 0.214 |
-| BM25 only | 0.788 | 0.985 | 1.000 | 0.895 | 0.912 | 0.917 | 0.215 |
+| BM25 only | 0.798 | 0.975 | 1.000 | 0.900 | 0.912 | 0.921 | 0.213 |
 | Dense + BM25 (naive, no RRF) | 0.924 | 1.000 | 1.000 | 0.977 | 0.980 | 0.980 | 0.216 |
 | Dense + BM25 + RRF | 0.904 | 1.000 | 1.000 | 0.970 | 0.976 | 0.976 | 0.216 |
 | Dense + BM25 + RRF + Reranker | 0.929 | 1.000 | 1.000 | 0.980 | 0.986 | 0.986 | 0.216 |
@@ -67,41 +67,41 @@ Reproduce: `uv run python ../eval/run_eval.py --query-ids <ids>` (from `backend/
 
 ## Hallucination Guard
 
-Full dataset (110 queries: 11 unanswerable, 99 answerable), based entirely on real retrieval + the real cross-encoder reranker's score vs. `rag_min_rerank_score=-3.0` — no LLM generation call involved in the guard's decision itself.
+Full dataset (110 queries: 11 unanswerable, 99 answerable), based entirely on real retrieval + the real cross-encoder reranker's score vs. `rag_min_rerank_score=-3.3` — no LLM generation call involved in the guard's decision itself.
 
-- **Accuracy:** 95.5%
-- **Precision:** 80.0%
+- **Accuracy:** 96.4%
+- **Precision:** 88.9%
 - **Recall:** 72.7%
-- **F1:** 0.762
-- **Specificity:** 98.0%
+- **F1:** 0.800
+- **Specificity:** 99.0%
 
 Confusion matrix (positive = guard declines to answer):
 
 | | Declined | Answered |
 |---|---|---|
 | **Unanswerable (should decline)** | TP=8 | FN=3 |
-| **Answerable (should answer)** | FP=2 | TN=97 |
+| **Answerable (should answer)** | FP=1 | TN=98 |
 
 Reproduce: `uv run python ../eval/evaluate_hallucination.py` (from `backend/`).
 
 ## Performance (latency)
 
-60 real retrieval calls, 5 real generation calls (chat backend: ollama:llama3.2:3b).
+60 real retrieval calls, 0 real generation calls (chat backend: ollama:llama3.2:3b).
 
 | Stage | Mean (ms) | P50 | P95 | P99 |
 |---|---|---|---|---|
-| Retrieval (dense+BM25+fuse) | 7.8 | 6.3 | 14.8 | 29.0 |
-| Reranking | 1078.8 | 1035.2 | 1399.2 | 1947.3 |
-| Retrieval+rerank total | 1222.5 | 1195.0 | 1542.3 | 2115.3 |
-| Generation | 70044.2 | 69194.6 | 101933.9 | 101933.9 |
-| End-to-end | 71363.5 | 70674.8 | 103305.6 | 103305.6 |
+| Retrieval (dense+BM25+fuse) | 11.1 | 8.5 | 27.9 | 37.6 |
+| Reranking | 1063.2 | 1011.0 | 1594.1 | 2024.6 |
+| Retrieval+rerank total | 1220.8 | 1206.2 | 1761.9 | 2173.5 |
+| Generation | — | — | — | — |
+| End-to-end | — | — | — | — |
 
 Reproduce: `uv run python ../eval/benchmark_latency.py` (from `backend/`).
 
 ## Testing
 
-- **Total tests:** 209
-- **Passed:** 209
+- **Total tests:** 219
+- **Passed:** 219
 - **Failed:** 0
 - **Skipped:** 0
 - **Code coverage:** 97%

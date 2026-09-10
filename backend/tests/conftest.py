@@ -59,6 +59,18 @@ async def _clean_state() -> AsyncGenerator[None, None]:
 async def client() -> AsyncGenerator[AsyncClient, None]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        # CsrfMiddleware requires a matching X-CSRF-Token header on every
+        # unsafe-method request (see app/core/csrf.py) — a real browser's
+        # JS reads the cookie itself, but httpx's test client has no such
+        # behavior, so every test would otherwise need to do this by hand.
+        # One safe-method request establishes the cookie (set on the first
+        # response that doesn't already carry one); echoing it back as a
+        # default header here means every existing test keeps working
+        # unmodified.
+        await ac.get("/health")
+        csrf_token = ac.cookies.get("csrf_token")
+        if csrf_token:
+            ac.headers["X-CSRF-Token"] = csrf_token
         yield ac
 
 

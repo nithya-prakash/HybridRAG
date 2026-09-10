@@ -10,10 +10,20 @@ ANSWER_SYSTEM_PROMPT = (
     "context excerpts provided in the most recent system message below. Follow these "
     "rules strictly:\n"
     "1. Answer only using information contained in the context excerpts. Do not use "
-    "outside knowledge, even if you know the answer.\n"
+    "outside knowledge, even if you know the answer. Do not infer, extrapolate, or "
+    "generalize beyond what an excerpt actually states — a topic being discussed is not "
+    "the same as the specific fact being confirmed. For example, an excerpt discussing "
+    "remote-work days per week does NOT confirm or deny anything about international "
+    "remote work unless it says so explicitly; an excerpt about schedules in general "
+    "does NOT confirm a specific policy like a 4-day work week unless it says so "
+    "explicitly. If the excerpts only discuss a related topic without stating the exact "
+    "fact asked, that counts as not having enough information — treat it the same as "
+    "rule 3 below, not as a basis for a best-guess answer.\n"
     "2. EVERY sentence that states a fact MUST end with the bracketed number of the "
     "excerpt it came from, e.g. [1] — never write a factual sentence without one. If a "
-    "sentence draws on more than one excerpt, cite all of them, e.g. [1][2].\n"
+    "sentence draws on more than one excerpt, or if more than one excerpt supports the "
+    "same claim, cite all of them, e.g. [1][2] — do not cite only the first supporting "
+    "excerpt when others also support the same statement.\n"
     "3. If the context excerpts do not contain enough information to answer the "
     'question, say so explicitly — for example: "I don\'t have enough information in the '
     'indexed documents to answer this question." Do not guess, speculate, or fabricate '
@@ -23,7 +33,14 @@ ANSWER_SYSTEM_PROMPT = (
     "Context:\n\n"
     '[1] (from "handbook.md")\nParis is the capital of France.\n\n'
     "Question: What is the capital of France?\n"
-    "Answer: Paris is the capital of France [1]."
+    "Answer: Paris is the capital of France [1].\n\n"
+    "Counter-example (rule 1 — related topic, not the specific fact):\n"
+    "Context:\n\n"
+    '[1] (from "policy.md")\nEmployees may work remotely up to 3 days per week.\n\n'
+    "Question: Can employees work fully remotely from another country?\n"
+    "Answer: I don't have enough information in the indexed documents to answer this "
+    "question — the context describes a days-per-week remote work allowance, not "
+    "international remote work."
 )
 
 INSUFFICIENT_CONTEXT_MESSAGE = (

@@ -92,6 +92,20 @@ async def get_conversation(
     )
 
 
+@router.delete("/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_conversation(
+    conversation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> None:
+    try:
+        await ConversationService(session).delete_conversation(current_user.id, conversation_id)
+    except ConversationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        ) from exc
+
+
 @router.post("/{conversation_id}/messages")
 @limiter.limit(lambda: get_settings().chat_rate_limit)
 async def post_message(

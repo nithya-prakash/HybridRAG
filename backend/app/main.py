@@ -9,6 +9,7 @@ from starlette.types import ASGIApp
 
 from app.api.routers import auth, conversations, documents, health, metrics, retrieval
 from app.core.config import get_settings
+from app.core.csrf import CsrfMiddleware
 from app.core.embeddings import get_embedding_backend
 from app.core.error_handlers import register_error_handlers
 from app.core.logging import configure_logging, get_logger
@@ -59,6 +60,11 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.add_middleware(SlowAPIMiddleware)
+    # Inside SlowAPI (so a CSRF rejection never counts against a client's
+    # rate-limit budget) but still inside the outer CORS/security-headers
+    # wrap below, so a 403 CSRF response still carries CORS headers — see
+    # _wrap_with_outer_middleware's docstring for why that matters.
+    app.add_middleware(CsrfMiddleware)
 
     register_error_handlers(app)
 

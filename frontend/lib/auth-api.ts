@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError, parseErrorDetail } from "./api";
+import { API_BASE_URL, ApiError, csrfHeaders, parseErrorDetail } from "./api";
 
 export interface User {
   id: string;
@@ -13,6 +13,7 @@ async function authFetch(path: string, init?: RequestInit): Promise<Response> {
     credentials: "include",
     headers: {
       "Content-Type": "application/json",
+      ...csrfHeaders(),
       ...init?.headers,
     },
   });

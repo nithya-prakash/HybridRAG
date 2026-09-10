@@ -1,10 +1,10 @@
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from starlette.requests import Request
 
 from app.core.config import get_settings
 from app.core.rate_limit import get_rate_limit_key
 from app.core.security import create_access_token
-from app.main import app
+from tests.helpers import new_client
 
 PASSWORD = "correcthorsebattery"
 
@@ -94,7 +94,7 @@ async def test_rate_limit_is_scoped_per_user_not_shared(client, monkeypatch):
     second = await client.post("/documents/upload", files=_upload_files("b.txt"))
     assert second.status_code == 429  # user A has now used their one request
 
-    other = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+    other = await new_client()
     try:
         await _register_and_login(other, "ratelimit-userB@example.com")
         # Same test-transport "IP" as user A, but a distinct user_id — this
