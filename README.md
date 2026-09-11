@@ -150,7 +150,7 @@ unanswerable, across 8 question categories.
 | Method | Recall@1 | Recall@5 | MRR | NDCG@5 |
 |---|---|---|---|---|
 | Dense only | 0.924 | 0.995 | 0.976 | 0.979 |
-| BM25 only | 0.788 | 0.985 | 0.895 | 0.912 |
+| BM25 only | 0.798 | 0.975 | 0.900 | 0.912 |
 | Dense + BM25 + RRF | 0.904 | 1.000 | 0.970 | 0.976 |
 | Dense + BM25 + RRF + Reranker | **0.929** | 1.000 | **0.980** | **0.986** |
 
