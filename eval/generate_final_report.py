@@ -340,6 +340,13 @@ def render(report: dict) -> str:
         "Treat these as a consistent, reproducible signal, not ground truth."
     )
     lines.append(
+        "- **Generation is not seed-pinned:** `OllamaChatBackend` sets no `temperature` or "
+        "`seed`, so re-running the identical generation sample against identical code can "
+        "produce different individual outcomes (confirmed directly — see `eval/RESULTS.md`'s "
+        "note on `q13`/`q032`/`q061`). Aggregate metrics are directionally trustworthy; "
+        "individual query outcomes are not guaranteed to reproduce run-to-run."
+    )
+    lines.append(
         "- **Generation sample size:** the generation/groundedness numbers above come from a "
         f"real but partial, category-stratified sample (not the full {n_questions}), because "
         "local CPU generation is slow (~1-6 minutes per query across generation + 3 judge "

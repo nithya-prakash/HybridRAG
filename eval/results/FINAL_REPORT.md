@@ -1,6 +1,6 @@
 # HybridRAG Evaluation — Final Report
 
-Generated: 2026-09-10T19:46:45.008773+00:00
+Generated: 2026-09-11T15:26:32.508661+00:00
 
 Every number in this report comes from actually running the scripts in `eval/` against this repository's real retrieval and generation pipeline — see each section for the exact command that reproduces it. Nothing here is estimated or hand-typed.
 
@@ -51,17 +51,15 @@ Note: on this dataset the naive (non-RRF) hybrid slightly **outperforms** RRF on
 
 Real generation on a **20-query category-stratified sample** (chat backend `ollama:llama3.2:3b`, judge `ollama:llama3.2:3b (same model as generation — a small local model judging its own output; see eval/RESULTS.md's caveat on this)`) — see Limitations for why this is a sample rather than the full dataset.
 
-**Note: this sample predates the hallucination-guard run below** (generated 2026-09-03T19:53:29.768066+00:00 vs. 2026-09-11T13:48:11.880193+00:00) — it has not been re-run against the current dataset/threshold; see `eval/RESULTS.md` for what specifically would change.
-
 | Metric | All queries | Answered only |
 |---|---|---|
-| Faithfulness (groundedness) | 0.645 | 0.719 |
-| Relevance | 0.947 | 0.938 |
-| Answer correctness | 0.763 | 0.719 |
+| Faithfulness (groundedness) | 0.592 | 0.864 |
+| Relevance | 0.895 | 0.818 |
+| Answer correctness | 0.737 | 0.727 |
 
-- **Citation correctness:** 0.788 (n=11 answers with ≥1 citation)
-- **Citation completeness:** 0.656 (n=16 queries with a labeled-relevant chunk)
-- **Abstention correct:** 17/20
+- **Citation correctness:** 0.864 (n=11 answers with ≥1 citation)
+- **Citation completeness:** 0.588 (n=17 queries with a labeled-relevant chunk)
+- **Abstention correct:** 13/20
 
 Judge model/prompt: see `eval/metrics/generation_metrics.py` (`FAITHFULNESS_RUBRIC`, `RELEVANCE_RUBRIC`, `ANSWER_CORRECTNESS_RUBRIC`) — the judge is the same chat backend as generation (see Limitations on shared-blind-spot risk). These are LLM-as-judge scores, not ground truth.
 
@@ -115,6 +113,7 @@ Reproduce: `uv run pytest --cov --cov-report=term-missing` (from `backend/`).
 - **Dataset size and provenance:** 116 labeled questions over 8 documents — 3 are this project's original fixture docs, 5 are additional synthetic fixture documents written specifically to grow this eval corpus with genuinely new, non-redundant material (not real company data). 116 is a deliberate stopping point, not the ~200-250 originally targeted — see the project history for the tradeoff (more real evaluation breadth vs. more labeled questions on the same corpus).
 - **Synthetic questions, human-designed ground truth:** questions and reference answers were authored against the actual document text (every `content_marker` is a verbatim substring, verified by the harness itself before any report is trusted), not generated-then-assumed-correct — but they were still authored by one person, not independently reviewed.
 - **LLM-as-judge limitations:** faithfulness/relevance/answer-correctness scores come from the same small local model (`llama3.2:3b`) that also generated the answers being judged — a real, known limitation (shared blind spots), not a synthetic-mode artifact. Treat these as a consistent, reproducible signal, not ground truth.
+- **Generation is not seed-pinned:** `OllamaChatBackend` sets no `temperature` or `seed`, so re-running the identical generation sample against identical code can produce different individual outcomes (confirmed directly — see `eval/RESULTS.md`'s note on `q13`/`q032`/`q061`). Aggregate metrics are directionally trustworthy; individual query outcomes are not guaranteed to reproduce run-to-run.
 - **Generation sample size:** the generation/groundedness numbers above come from a real but partial, category-stratified sample (not the full 116), because local CPU generation is slow (~1-6 minutes per query across generation + 3 judge calls) — see `eval/RESULTS.md` for the exact sample and why.
 - **Model dependency:** retrieval numbers reflect `BAAI/bge-small-en-v1.5` (embeddings) and `cross-encoder/ms-marco-MiniLM-L-6-v2` (reranker); generation numbers reflect `llama3.2:3b`. Different models would produce different numbers — these are not universal claims about hybrid RAG.
 - **Local hardware:** all numbers were measured on a single development machine under real but not isolated conditions (other local processes competing for CPU/memory at times) — latency numbers in particular should be read as directional, not a clean-room benchmark.

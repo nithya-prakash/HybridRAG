@@ -163,12 +163,14 @@ threshold). The remaining recall gap concentrates in questions where the reranke
 topically-similar-but-wrong content confidently (see `eval/RESULTS.md` for the exact queries
 and the second-layer prompt constraint added to address it directly).
 
-**Generation** (real `llama3.2:3b` via Ollama, 20-query stratified sample): faithfulness 0.719
-and answer correctness 0.719 on answered queries; citation correctness 0.788, completeness
-0.656. The 3 abstention failures in this sample are the exact same queries the hallucination
-guard's confusion matrix flagged independently — a real cross-method consistency check. A live
-test of the second mitigation layer against exactly those 3 guard-miss cases showed the
-generation prompt's own constraint catching all 3 anyway (see `eval/RESULTS.md`).
+**Generation** (real `llama3.2:3b` via Ollama, 20-query stratified sample, re-run against the
+current threshold): faithfulness 0.864 and answer correctness 0.727 on answered queries;
+citation correctness 0.864, completeness 0.588. Abstention 13/20 — including 3 new false
+declines on answerable, strongly-retrieved queries with no guard involvement, traced to
+`llama3.2:3b`'s generation not being pinned to a fixed seed/temperature (real run-to-run
+sampling variance, not a regression from this recalibration). A live test of the second
+mitigation layer against known guard-miss cases showed the generation prompt's own constraint
+catching them independently of the guard (see `eval/RESULTS.md` for the full breakdown).
 
 **Latency:** retrieval ~8ms mean, reranking ~1.08s mean (p95 1.4s), generation ~46s mean (down
 from ~70s — a real bug meant the local backend never bounded output length; see

@@ -150,60 +150,68 @@ structurally cannot fix, hence the second layer below.
 
 ## Generation: a real 20-query sample
 
-Real generation (`llama3.2:3b` via Ollama), real judge (the same model), on the full
-20-query sample stratified across all 8 categories (the sample originally attempted — see
-§ History below for the first attempt's failure and the fixes that made this run possible).
+Real generation (`llama3.2:3b` via Ollama), real judge (the same model), on the same 20-query
+sample stratified across all 8 categories, **re-run against the current `-0.6` threshold and
+116-query dataset** (the sample was originally attempted, and first run, before that
+recalibration — see § History below for the first attempt's failure and the fixes that made a
+complete run possible; a second full re-run is what's reported below).
 
 | Metric | All queries | Answered only |
 |---|---|---|
-| Faithfulness (groundedness) | 0.645 | 0.719 |
-| Relevance | 0.947 | 0.938 |
-| Answer correctness | 0.763 | 0.719 |
+| Faithfulness (groundedness) | 0.592 | 0.864 |
+| Relevance | 0.895 | 0.818 |
+| Answer correctness | 0.737 | 0.727 |
 
-- **Citation correctness:** 0.788 (n=11 answers that included ≥1 citation — 78.8% of cited
-  chunks were actually labeled relevant)
-- **Citation completeness:** 0.656 (n=16 queries with a labeled-relevant chunk — on average,
-  65.6% of the truly relevant chunks available got cited)
-- **Abstention correct:** 17/20
+- **Citation correctness:** 0.864 (n=11 answers that included ≥1 citation)
+- **Citation completeness:** 0.588 (n=17 queries with a labeled-relevant chunk)
+- **Abstention correct:** 13/20 (1 query errored and wasn't scored — see below; 19 real outcomes)
 
-**A real, useful consistency check:** the 3 abstention failures in this sample (`q033`,
-`q034`, `q093`) were, at the time this generation sample was run (threshold `-3.3`), the
-*exact same three queries* independently flagged in the full-dataset hallucination confusion
-matrix (`q033`/`q034` as false positives, `q093` as a false negative) — the guard's specific
-failure modes were stable and reproducible, not sampling noise, whether measured via the fast
-reranker-score-only method or the slow real-generation path.
+**What moved, and why — two real, distinguishable effects, not one blob of noise:**
 
-**Note: this generation sample predates the `-3.3`→`-0.6` recalibration above.** Under the
-current threshold, `q093` (score `-1.5408`) is now caught by the guard itself (no longer a
-guard miss), so it would no longer show up as a "second-layer catch" if this sample were
-re-run today — its abstention-correct outcome is unchanged (still correctly declined), only
-*which* layer catches it has moved. `q033`/`q034` are unaffected — both remain false positives
-at any workable threshold (see above). Re-running the generation sample against the new
-threshold would confirm this directly; it hasn't been re-run in this session (see the resource
-constraints noted throughout § Latency and § History).
+1. **`q093` is now correctly caught by the guard itself, not the second layer.** At the old
+   `-3.3` threshold it was a guard miss rescued by the prompt constraint (`second_layer_catch:
+   true`, see below); at the current `-0.6` threshold (score `-1.5408`) the guard declines it
+   directly (`guard_declined: true`). Its final abstention-correct outcome is unchanged — this
+   confirms the prediction made when the threshold was recalibrated, not a new finding.
+2. **`q110` is a new false positive**, exactly as the threshold sweep predicted when `-0.6` was
+   chosen — a real answerable `cross_document_discriminator` query (score `-1.6057`) now
+   incorrectly declined by the guard. This is the known, disclosed precision cost of moving the
+   threshold (see § Hallucination guard above), not a surprise.
 
-**Why faithfulness (0.719 answered-only) is the honest, weaker number here, not a bug:**
-unlike the earlier 10-query sample (which happened to draw an easy subset), this 20-query
-sample's answered-only faithfulness genuinely sits at 0.719 — real evidence that `llama3.2:3b`
-does not always stay perfectly grounded even when it does attempt an answer. This is exactly
-the kind of number a partial-but-real sample is for: not flattering, not hidden.
+**A genuinely new, honest finding: 3 additional false declines with no guard or prompt
+involvement.** `q13`, `q032`, and `q061` are all answerable queries the guard did **not**
+decline (`guard_declined: false`, real rerank scores `+6.72`, `+5.72`, `+7.60` — well clear of
+any threshold, old or new) and whose retrieved content wasn't touched by this session's
+changes, yet the model itself declined all three on this run. The prior 17/20 run (identical
+prompt, identical model, identical queries) did not fail on any of these three. Checked
+directly: `OllamaChatBackend` (`app/core/chat.py`) sets no `temperature` or `seed` in its
+request body, so Ollama uses its own default sampling — **generation is genuinely stochastic
+run-to-run**, not pinned for reproducibility. The honest, unproven-but-best-supported
+explanation is real LLM sampling variance on a small local model, not a regression caused by
+the threshold or dataset changes (which never touch these three queries' guard decision or
+retrieved context). This wasn't visible before because the sample had only been run once;
+running it twice is what surfaced it. **Pinning a seed for reproducible generation evaluation
+is a real, concrete follow-up this finding motivates — not done in this session.**
 
-**Citation correctness (0.788) and completeness (0.656) are both real, moderate gaps:** the
-model's citations are usually but not always pointing at genuinely relevant chunks, and it
-usually but not always cites everything relevant it retrieved. Both numbers moved down from
-the earlier 10-query sample's (1.000/0.571) as more data came in — expected, and a reminder
-that a 10-query sample was too small to trust for these two metrics specifically.
+**Faithfulness moved up (0.719→0.864 answered-only) and relevance moved down (0.938→0.818
+answered-only)** on the same underlying sample-size effects: with 3 more declines this run,
+`n` for "answered only" dropped from 16 to 11 — a smaller denominator swings averages more,
+consistent with the same read given earlier in this document about the 10-query→20-query
+transition. Citation correctness improved (0.788→0.864) and completeness dropped (0.656→0.588)
+for the same reason — fewer answered queries changes which specific citations get averaged.
 
-**One query (`q033`) hit a real backend error** (`HTTPStatusError: 500` from Ollama's
-`/api/chat` endpoint) rather than a timeout this time — a different real failure mode under
-sustained local CPU load, caught by the same resilience fix (recorded, not fatal to the run).
+**One query (`q088`) hit a real backend error** (`HTTPStatusError: 500` from Ollama's
+`/api/chat` endpoint) and wasn't scored — the same resilience fix as before caught it, recorded
+it, and continued the run rather than losing the other 19 real results.
 
 Judge rubrics and prompts: `eval/metrics/generation_metrics.py`
 (`FAITHFULNESS_RUBRIC`/`RELEVANCE_RUBRIC`/`ANSWER_CORRECTNESS_RUBRIC`). The judge is the same
 small model doing the generating — a real, known limitation (shared blind spots), not a
 synthetic-mode artifact; treat these as a reproducible regression signal, not ground truth.
-**20 real queries is still a sample, not the full 116** — read these as real, directionally
-trustworthy numbers, not a tight confidence interval.
+**20 real queries is still a sample, not the full 116, and generation itself is not
+reproducible run-to-run without a pinned seed** (see above) — read these as real, directionally
+trustworthy numbers, not a tight confidence interval, and expect some query-level churn on any
+re-run.
 
 ### The second mitigation layer: does it actually catch what the guard misses?
 
@@ -214,11 +222,11 @@ prompt (`app/services/rag/prompts.py`) was strengthened with an explicit constra
 inferring a specific answer from context that only discusses the topic generally, as a second,
 independent layer that runs *after* the guard, during real generation.
 
-**Real test, real result** (run at the time against the then-current `-3.3` threshold, when
-`q093` was still a guard miss — see the note above on why `q093` is guard-caught under the
-current `-0.6` threshold instead): a live generation run against 3 known guard-failure cases
-(plus 2 normal control queries) — real `llama3.2:3b`, real retrieval, the actual production
-prompt — produced this for all three:
+**Real test, real result** (run against the then-current `-3.3` threshold, when `q093` was
+still a guard miss — see above on why `q093` is guard-caught under the current `-0.6`
+threshold instead, and no longer available as a second-layer-catch example): a live generation
+run against 3 known guard-failure cases (plus 2 normal control queries) — real `llama3.2:3b`,
+real retrieval, the actual production prompt — produced this for all three:
 
 ```
 q089 "Does the company offer a 4-day work week?"
@@ -260,6 +268,13 @@ percentage without running real generation across the *full* dataset (not just t
 cases), which this session's shared-machine resource constraints did not allow (see below). The
 honest claim is narrower and still real: on the specific cases the guard is known to miss, the
 second layer was tested live and caught every one.
+
+**Why the re-run 20-query sample above shows `second_layer_catch_count: 0`:** not a regression
+— this fixed stratified sample's 3 unanswerable queries (`q088`, `q093`, `q096`) simply don't
+include any of the guard's current remaining true misses (`q089`, `q094`, `q088`, `q111`
+— see § Hallucination guard above); `q088` also errored on this run rather than being scored.
+The live 3-case test above remains the only direct evidence the second layer catches a genuine
+guard miss; extending that coverage to the sample's own query set was not done in this session.
 
 ## Latency
 
