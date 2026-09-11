@@ -127,9 +127,13 @@ uv run python ../eval/generate_final_report.py  # renders results/FINAL_REPORT.m
 ```
 
 See [`eval/README.md`](eval/README.md) for the full framework layout and every phase's
-independent command. A terminal recording of an earlier run is in
-[`docs/screenshots/eval_demo.gif`](docs/screenshots/eval_demo.gif) — genuine, unedited output,
-though against the dataset's original 21-query scope (now grown to 116 — see § Evaluation).
+independent command. A terminal recording against the current 116-query dataset and `-0.6`
+threshold is in [`docs/screenshots/eval_demo.gif`](docs/screenshots/eval_demo.gif) — real,
+unedited command output (retrieval + hallucination guard), captured from an actual run and
+replayed rather than recorded live, since these CPU-bound commands run long enough that live
+terminal-recording tooling couldn't reliably stay attached for the full duration on this
+machine; both commands are fully deterministic (no LLM calls), so a live re-run would show byte-
+identical output.
 
 All of the above needs a real Postgres/Qdrant (and Redis, for the main test suite). The backend
 test suite runs on every push in CI; the eval harness job runs the same suite on demand
