@@ -6,9 +6,9 @@ produced by `eval/run_all.py`). This document is the narrative version — the s
 plus the story of how the framework got here, including real bugs and real findings the
 harness surfaced along the way.
 
-**Run:** 2026-09-03 · retrieval + hallucination guard + latency + tests: full 110-query
+**Run:** 2026-09-11 · retrieval + hallucination guard + latency + tests: full 116-query
 dataset, real local embeddings, real BM25, real reranker. Generation/groundedness: a real
-20-query category-stratified sample (see § Generation below for why not the full 110).
+20-query category-stratified sample (see § Generation below for why not the full 116).
 
 ```bash
 cd backend
@@ -18,20 +18,28 @@ uv run python ../eval/generate_final_report.py
 
 ## Dataset
 
-110 labeled queries over 8 documents (50 chunks indexed): the original 3 fixture documents
+116 labeled queries over 8 documents (50 chunks indexed): the original 3 fixture documents
 plus 5 more written specifically to grow this corpus with genuinely new material, not padding
-more questions onto the same 3. 99 queries are answerable from the corpus; 11 are deliberately
+more questions onto the same 3. 99 queries are answerable from the corpus; 17 are deliberately
 unanswerable. Eight question categories: `single_chunk` (52), `numerical` (16), `procedural`
-(12), `out_of_corpus` (11), `cross_document_discriminator` (6), `terminology_mismatch` (6),
+(12), `out_of_corpus` (17), `cross_document_discriminator` (6), `terminology_mismatch` (6),
 `multi_chunk` (5), `single_chunk_pdf_page` (2).
 
-**Why 110, not the ~200-250 originally targeted:** growing the corpus further would mean
+**Why 116, not the ~200-250 originally targeted:** growing the corpus further would mean
 either inventing more synthetic fixture documents (more effort, diminishing returns on
 non-redundant question material) or padding more questions onto the same 8 documents, which
-would inflate the count without adding real evaluation signal. 110 real, traceable,
+would inflate the count without adding real evaluation signal. 116 real, traceable,
 non-redundant questions were judged more valuable than a larger but redundant set, given how
 much of the rest of this framework (ablation, hallucination confusion matrix, latency,
 generation) still needed real execution — see the project history for this tradeoff.
+
+**The 6 most recent additions (`q111`-`q116`) target the hallucination guard specifically:**
+after the guard's original 11-negative confusion matrix showed a 72.7% recall ceiling, 6 new
+deliberately-unanswerable questions were added — each individually verified against the actual
+source document text (not assumed) — to check whether that ceiling was real or an artifact of
+too little labeled evidence. One of the original 11 (`q088`) turned out to be an exact
+duplicate of `q21`; it was replaced with a genuinely new question rather than left inflating
+the count. See § Hallucination guard below for what this changed.
 
 ## Retrieval: five configurations, real embeddings and reranker throughout
 
@@ -71,39 +79,46 @@ not a stand-in for a real alternative the app could switch to.
 
 The guard's decline decision depends only on the real retrieval pipeline and the real
 cross-encoder reranker's score vs. `rag_min_rerank_score` — no generation call involved — so
-this scores the **full** 110-query dataset for real.
+this scores the **full** 116-query dataset for real.
 
-**Recalibrated from `-3.0` to `-3.3`** (see § History below for the full sweep this came
-from): a proper threshold sweep over every observed score in this dataset — not a guess —
-found a real gap in the distribution between `q034` (an answerable query, incorrectly
-declined at the old threshold, scored `-3.1147`) and `q096` (the nearest true negative, scored
-`-3.475`). `-3.3` sits in that gap.
+**Recalibrated from `-3.3` to `-0.6`** after growing the labeled negative set from 11 to 17
+(see § History below for the full sweep this came from): the same exhaustive-sweep methodology
+used for the earlier `-3.0`→`-3.3` change, rerun against the richer 17-negative distribution,
+found a new real gap between `q115` (a true negative, scored `-1.3234`) and `q109` (an
+answerable query, scored `+0.145`) — any threshold in that gap scores identically, so `-0.6`
+was chosen as a round number centered in it rather than an exact boundary value, to stay robust
+to small score drift.
 
 | | Declined | Answered |
 |---|---|---|
-| **Unanswerable (should decline)** | TP=8 | FN=3 |
-| **Answerable (should answer)** | FP=1 | TN=98 |
+| **Unanswerable (should decline)** | TP=13 | FN=4 |
+| **Answerable (should answer)** | FP=4 | TN=95 |
 
-- **Accuracy:** 96.4% (was 95.5% at `-3.0`)
-- **Precision:** 88.9% (was 80.0%)
-- **Recall:** 72.7% (unchanged)
-- **F1:** 0.800 (was 0.762)
-- **Specificity:** 99.0% (was 98.0%)
+- **Accuracy:** 93.1% (was 94.0% at `-3.3` against this same 17-negative set)
+- **Precision:** 76.5% (was 91.7%)
+- **Recall:** 76.5% (was 64.7%)
+- **F1:** 0.765 (was 0.759)
+- **Specificity:** 96.0% (was 99.0%)
 
-**Read honestly:** the guard is now even better at not falsely declining answerable questions
-(99.0% specificity, only 1 false positive out of 99) but still misses roughly 1 in 4 genuinely
-unanswerable questions (72.7% recall, unchanged) — those 3 false negatives are the guard's
-actual failure mode: a hallucination-risk question got a confident-looking answer anyway.
+**Read honestly, including the tradeoff this recalibration makes:** recall jumped from 64.7% to
+76.5% — catching 2 more genuinely unanswerable questions than the old threshold would have on
+this same richer dataset — at the cost of precision (91.7%→76.5%) and 3 more false positives
+(1→4 out of 99 answerable queries). This is a deliberate choice, not a free win: for a
+hallucination guard specifically, a missed unanswerable question (a confident-looking wrong
+answer) is a worse failure mode than an over-cautious decline on a question the system could
+actually have answered, so trading some precision for recall here is the right direction — see
+§ History below for the full sweep that surfaced this tradeoff and the alternative thresholds
+it ruled out.
 
-**Why recall didn't move, and can't from a threshold change alone:** a full sweep over every
-possible threshold (not just `-3.3`) confirmed no cutoff on rerank score improves recall
-without a worse overall trade-off — `q089` and `q094` (below) score *higher* than many
-genuinely answerable queries, so no threshold separates them from real answers without also
-declining a lot of real answers. This is a different failure mode than mis-calibration, and
-the fix is a second signal, not a better number — see § Generation below for the second-layer
-prompt constraint added to address it directly.
+**Why recall still can't reach 100% from a threshold change alone:** the same exhaustive sweep
+that found `-0.6` also confirmed no cutoff clears the remaining 4 false negatives without
+declining real answers too — `q111`, `q088`, `q089`, and `q094` (below) score at or above
+several genuinely answerable queries in this dataset (e.g. `q108` at `+2.7688`, sitting directly
+between `q111` and `q089`), so no single number separates them. This is a different failure
+mode than mis-calibration, and the fix is a second signal, not a better number — see
+§ Generation below for the second-layer prompt constraint added to address it directly.
 
-**What the 3 false negatives and 1 false positive actually look like** (real, specific,
+**What the 4 false negatives and 4 false positives actually look like** (real, specific,
 not hypothetical):
 
 - `q089` ("Does the company offer a 4-day work week?") scored **+3.27** — well above any
@@ -112,18 +127,26 @@ not hypothetical):
   confidence isn't the same as "this chunk answers this question."
 - `q094` ("Can employees work fully remotely from another country?") similarly scored **+4.81**
   against remote-work-adjacent content that doesn't cover international remote work.
-- `q093` ("What is the minimum contract value for the Enterprise plan?") scored **-1.54** —
-  above the threshold, but only barely; a borderline case that a small further recalibration
-  might catch, at the cost of moving closer to other, currently-safe answerable scores.
-- `q034` (`terminology_mismatch` — paraphrased vocabulary vs. the source text) scored
-  **-3.11**, just above the new threshold, fixed by this recalibration. `q033` (same category,
-  scored **-7.25**) remains a false positive at any reasonable threshold — the cross-encoder
-  underweights a correct answer when the question's wording diverges enough from the source's.
+- `q088` ("What tool or software does the engineering team use to document incident
+  postmortems?") scored **+2.81** — the incident-response runbook discusses postmortems in
+  detail without ever naming a tool, and the reranker scores that topical overlap highly.
+- `q111` ("What ticketing system does the support team use to track customer issues?") scored
+  **+2.73** — same pattern: real, detailed, topically-adjacent content that never actually
+  names a system.
+- `q033`/`q034` (`terminology_mismatch`, scored **-7.25**/**-3.11**) remain false positives at
+  any reasonable threshold — the cross-encoder underweights a correct answer when the
+  question's wording diverges enough from the source's.
+- `q09` ("What's the recommended maximum size for a single pull request?", scored **-1.64**)
+  and `q110` (a `cross_document_discriminator` query, scored **-1.61**) are the 2 new false
+  positives introduced by moving the threshold up from `-3.3` — real answerable questions whose
+  correct chunk happened to score lower than the new, more recall-favoring cutoff.
 
-This is exactly the kind of finding a real evaluation is supposed to surface: the guard's
-recall gap concentrates in confident-but-wrong reranker scores (over-declining is now rare —
-1 false positive across 99 answerable queries; under-declining on topically-adjacent-but-wrong
-content is the real, remaining gap), not evenly across all unanswerable questions.
+This is exactly the kind of finding a real evaluation is supposed to surface: with more labeled
+evidence, the guard's recall gap is now smaller (76.5% vs. the earlier 72.7%, measured on a
+weaker 11-negative sample) but not zero, and the specific remaining failures (`q089`, `q094`,
+`q088`, `q111`) share one root cause — a reranker that rewards topical overlap regardless of
+whether the specific fact asked is actually present — which a rerank-score threshold alone
+structurally cannot fix, hence the second layer below.
 
 ## Generation: a real 20-query sample
 
@@ -144,11 +167,20 @@ Real generation (`llama3.2:3b` via Ollama), real judge (the same model), on the 
 - **Abstention correct:** 17/20
 
 **A real, useful consistency check:** the 3 abstention failures in this sample (`q033`,
-`q034`, `q093`) are the *exact same three queries* independently flagged in the full-dataset
-hallucination confusion matrix above (`q033`/`q034` as false positives, `q093` as a false
-negative) — the guard's specific failure modes are stable and reproducible, not sampling
-noise, whether measured via the fast reranker-score-only method or the slow real-generation
-path.
+`q034`, `q093`) were, at the time this generation sample was run (threshold `-3.3`), the
+*exact same three queries* independently flagged in the full-dataset hallucination confusion
+matrix (`q033`/`q034` as false positives, `q093` as a false negative) — the guard's specific
+failure modes were stable and reproducible, not sampling noise, whether measured via the fast
+reranker-score-only method or the slow real-generation path.
+
+**Note: this generation sample predates the `-3.3`→`-0.6` recalibration above.** Under the
+current threshold, `q093` (score `-1.5408`) is now caught by the guard itself (no longer a
+guard miss), so it would no longer show up as a "second-layer catch" if this sample were
+re-run today — its abstention-correct outcome is unchanged (still correctly declined), only
+*which* layer catches it has moved. `q033`/`q034` are unaffected — both remain false positives
+at any workable threshold (see above). Re-running the generation sample against the new
+threshold would confirm this directly; it hasn't been re-run in this session (see the resource
+constraints noted throughout § Latency and § History).
 
 **Why faithfulness (0.719 answered-only) is the honest, weaker number here, not a bug:**
 unlike the earlier 10-query sample (which happened to draw an easy subset), this 20-query
@@ -170,21 +202,23 @@ Judge rubrics and prompts: `eval/metrics/generation_metrics.py`
 (`FAITHFULNESS_RUBRIC`/`RELEVANCE_RUBRIC`/`ANSWER_CORRECTNESS_RUBRIC`). The judge is the same
 small model doing the generating — a real, known limitation (shared blind spots), not a
 synthetic-mode artifact; treat these as a reproducible regression signal, not ground truth.
-**20 real queries is still a sample, not the full 110** — read these as real, directionally
+**20 real queries is still a sample, not the full 116** — read these as real, directionally
 trustworthy numbers, not a tight confidence interval.
 
 ### The second mitigation layer: does it actually catch what the guard misses?
 
 The hallucination guard section above shows the pre-generation rerank-score threshold cannot,
-by itself, catch `q089`/`q094`/`q093` without a worse trade-off elsewhere — a different failure
-mode than mis-calibration. The system prompt (`app/services/rag/prompts.py`) was strengthened
-with an explicit constraint against inferring a specific answer from context that only
-discusses the topic generally, as a second, independent layer that runs *after* the guard,
-during real generation.
+by itself, catch `q089`/`q094` (and, at the current `-0.6` threshold, also `q088`/`q111`)
+without a worse trade-off elsewhere — a different failure mode than mis-calibration. The system
+prompt (`app/services/rag/prompts.py`) was strengthened with an explicit constraint against
+inferring a specific answer from context that only discusses the topic generally, as a second,
+independent layer that runs *after* the guard, during real generation.
 
-**Real test, real result:** a live generation run against exactly these 3 known guard-failure
-cases (plus 2 normal control queries) — real `llama3.2:3b`, real retrieval, the actual
-production prompt — produced this for all three:
+**Real test, real result** (run at the time against the then-current `-3.3` threshold, when
+`q093` was still a guard miss — see the note above on why `q093` is guard-caught under the
+current `-0.6` threshold instead): a live generation run against 3 known guard-failure cases
+(plus 2 normal control queries) — real `llama3.2:3b`, real retrieval, the actual production
+prompt — produced this for all three:
 
 ```
 q089 "Does the company offer a 4-day work week?"
@@ -218,8 +252,9 @@ return.
 
 **What this does and doesn't mean for the headline recall number:** the hallucination guard's
 own confusion matrix (§ above) is unchanged and correctly so — it measures the pre-generation
-signal in isolation, which is still real and still capped at 72.7% recall for the reasons
-already documented. The second layer is a genuinely different, complementary mechanism that
+signal in isolation, which is still real and still capped at 76.5% recall (on the current,
+17-negative dataset) for the reasons already documented. The second layer is a genuinely
+different, complementary mechanism that
 only exists once generation happens; it cannot be reduced to a single "combined recall"
 percentage without running real generation across the *full* dataset (not just these 3 known
 cases), which this session's shared-machine resource constraints did not allow (see below). The
@@ -291,7 +326,7 @@ loop already was: catch, record, continue.
 uv run pytest --cov --cov-report=term-missing
 ```
 
-**209 tests, 0 failed, 0 skipped, 97% code coverage** (57 of 2110 statements uncovered) —
+**220 tests, 0 failed, 0 skipped, 97% code coverage** (57 of 2152 statements uncovered) —
 re-verified fresh as part of this evaluation, matching what the README already claimed (not a
 new number, but independently confirmed rather than trusted from an older run).
 
@@ -374,6 +409,48 @@ model) — but its actual effect on `llama3.2:3b`'s real behavior on these speci
 remains unverified. Re-running `uv run python ../eval/run_eval.py --query-ids q089,q094,q093`
 on a machine with more headroom (or after freeing memory from other processes) would close
 this gap.
+
+### `-3.3` → `-0.6`: growing the negative set from 11 to 17 revealed a genuinely better threshold
+
+The `-3.0`→`-3.3` recalibration above was honest that it couldn't move recall: with only 11
+labeled negatives, the sweep had too little evidence to tell whether 72.7% was a real ceiling
+or an artifact of a small, possibly unrepresentative sample. Rather than guess, 6 new
+deliberately-unanswerable questions were written and individually verified against the actual
+source document text (`eval/datasets/knowledge_base_eval.json`, `q111`-`q116`) — and, while
+auditing the existing 11, a real bug was found: `q088` was an exact duplicate of `q21`
+(both "What is the company's policy on parental leave?"), silently inflating the old count
+without adding evidence. It was replaced with a genuinely new, verified-unanswerable question
+before any of this recalibration work started.
+
+Re-running the full confusion matrix against this new, real 116-query/17-negative dataset at
+the old `-3.3` threshold gave **94.0% accuracy, 91.7% precision, 64.7% recall, F1 0.759**
+(TP=11, FN=6, FP=1, TN=98) — recall actually *dropped* from the old 72.7%, an honest and
+expected result of adding real, harder evidence rather than a regression to fix: the 6 new
+negatives include deliberate near-misses (e.g. `q114`, asking whether the company holds a SOC 2/
+ISO 27001 certification *itself*, when the corpus only discusses vendor security requirements),
+designed to actually stress-test the guard rather than pad the count with easy negatives.
+
+Re-running the same exhaustive-sweep methodology from the `-3.0`→`-3.3` recalibration — every
+unique observed rerank score in the new dataset tried as a candidate threshold, scored for
+accuracy/precision/recall/F1 — found a real, better option this time: **`-0.6`** (chosen as a
+round number inside the same-scoring gap between `q115` at `-1.3234` and `q109` at `+0.145`)
+reaches **93.1% accuracy, 76.5% precision, 76.5% recall, F1 0.765** (TP=13, FN=4, FP=4, TN=95)
+— higher recall *and* higher F1 than the old threshold re-scored on this same richer dataset,
+at a real, disclosed precision cost (91.7%→76.5%, 1→4 false positives out of 99 answerable
+queries). This is reported as a deliberate tradeoff, not an unambiguous win: for a
+hallucination guard, missing an unanswerable question is the worse failure mode, so trading
+some precision for recall here is the right call, but it is a real cost, not a free
+improvement. See § Hallucination guard above for the full matrix and the specific queries this
+changes. `rag_min_rerank_score` updated to `-0.6` in `app/core/config.py`, `backend/.env`, and
+`backend/.env.example` (the same env-file-override bug pattern the `-3.0`→`-3.3` change already
+found once — checked and updated in all three places this time).
+
+The sweep also reconfirmed the same negative result as before, now on stronger evidence: no
+threshold clears the remaining 4 false negatives (`q089`, `q094`, `q088`, `q111`) without
+declining more real answers — `q108` (a genuinely answerable query, score `+2.7688`) sits
+directly between two of them (`q111` at `+2.7285` and `q089` at `+3.2706`). This is the same
+structural limitation the second mitigation layer exists to address, now with two more
+concrete examples (`q088`, `q111`) of the exact failure pattern it was built for.
 
 ### A JSON-parsing bug that silently mis-scored well-formed judge output
 

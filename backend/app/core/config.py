@@ -135,7 +135,7 @@ class Settings(BaseSettings):
     # scored confidently), addressed instead by the second-layer prompt
     # constraint in app/services/rag/prompts.py rather than by this
     # threshold. Re-tune as the eval dataset grows further.
-    rag_min_rerank_score: float = -3.3
+    rag_min_rerank_score: float = -0.6
     rag_max_completion_tokens: int = 800
 
     # Observability

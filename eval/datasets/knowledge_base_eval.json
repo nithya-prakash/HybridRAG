@@ -1202,12 +1202,12 @@
     },
     {
       "id": "q088",
-      "query": "What is the company's policy on parental leave?",
+      "query": "What tool or software does the engineering team use to document incident postmortems?",
       "category": "out_of_corpus",
       "relevant_chunks": [],
       "reference_answer": null,
       "answerable": false,
-      "notes": "Deliberately unanswerable from this corpus \u2014 used to check that the system declines rather than fabricates an answer."
+      "notes": "Not covered \u2014 incident_response_runbook.md specifies what a postmortem must contain and its review process, but never names a specific tool or platform. Was previously an exact duplicate of q21 (parental leave), not a genuinely new negative example \u2014 fixed while growing this category."
     },
     {
       "id": "q089",
@@ -1478,6 +1478,60 @@
       ],
       "reference_answer": "No \u2014 security incident reporting has a 1-hour window, while Sev1 Incident Commander assignment has a much shorter 10-minute window; they are different processes with different timelines.",
       "answerable": true
+    },
+    {
+      "id": "q111",
+      "query": "What ticketing system does the support team use to track customer issues?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 customer_success_playbook.md describes SLAs and escalation process, never names a specific tool."
+    },
+    {
+      "id": "q112",
+      "query": "Does the company offer commuter or public transit benefits?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered by compensation_and_benefits.md or employee_handbook.md \u2014 neither document mentions commuter/transit benefits."
+    },
+    {
+      "id": "q113",
+      "query": "What happens to unvested equity if an employee is terminated for cause?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 compensation_and_benefits.md describes the vesting schedule itself but not what happens to unvested equity on termination."
+    },
+    {
+      "id": "q114",
+      "query": "Does the company hold a SOC 2 or ISO 27001 certification itself?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 security_policy.md requires SOC 2 review of third-party vendors, but never states the company holds any certification itself. A deliberate near-miss: tests whether retrieval distinguishes \"vendor must have X\" from \"do we have X\"."
+    },
+    {
+      "id": "q115",
+      "query": "Can Enterprise customers set up a custom subdomain for their login page?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered \u2014 enterprise_console_faq.md covers SSO, RBAC, audit logs, data residency, IP allowlisting, and uptime, but never mentions custom subdomains or login-page branding."
+    },
+    {
+      "id": "q116",
+      "query": "Does the company provide a stipend for home office equipment?",
+      "category": "out_of_corpus",
+      "relevant_chunks": [],
+      "reference_answer": null,
+      "answerable": false,
+      "notes": "Not covered by compensation_and_benefits.md (professional development budget only) or employee_handbook.md (remote work security expectations only, no equipment stipend)."
     }
   ]
 }

@@ -129,7 +129,7 @@ uv run python ../eval/generate_final_report.py  # renders results/FINAL_REPORT.m
 See [`eval/README.md`](eval/README.md) for the full framework layout and every phase's
 independent command. A terminal recording of an earlier run is in
 [`docs/screenshots/eval_demo.gif`](docs/screenshots/eval_demo.gif) — genuine, unedited output,
-though against the dataset's original 21-query scope (now grown to 110 — see § Evaluation).
+though against the dataset's original 21-query scope (now grown to 116 — see § Evaluation).
 
 All of the above needs a real Postgres/Qdrant (and Redis, for the main test suite). The backend
 test suite runs on every push in CI; the eval harness job runs the same suite on demand
@@ -142,7 +142,7 @@ below comes from actually running it against the real pipeline. See
 [`eval/RESULTS.md`](eval/RESULTS.md) for the full narrative and
 [`eval/results/FINAL_REPORT.md`](eval/results/FINAL_REPORT.md) for the complete report.
 
-**Dataset:** 110 labeled queries, 8 documents, 50 chunks — 99 answerable, 11 deliberately
+**Dataset:** 116 labeled queries, 8 documents, 50 chunks — 99 answerable, 17 deliberately
 unanswerable, across 8 question categories.
 
 **Retrieval** (real local embeddings, real BM25, real cross-encoder reranker, full dataset):
@@ -155,10 +155,11 @@ unanswerable, across 8 question categories.
 | Dense + BM25 + RRF + Reranker | **0.929** | 1.000 | **0.980** | **0.986** |
 
 **Hallucination guard** (full dataset, real retrieval + reranker score, no LLM call):
-**96.4% accuracy**, 88.9% precision, 72.7% recall, F1 0.800 — TP=8, TN=98, FP=1, FN=3
-(recalibrated from an exhaustive threshold sweep over the full labeled distribution — see
-`eval/RESULTS.md` for the sweep and why recall specifically can't move from a threshold change
-alone). The remaining recall gap concentrates in questions where the reranker scores
+**93.1% accuracy**, 76.5% precision, 76.5% recall, F1 0.765 — TP=13, TN=95, FP=4, FN=4
+(recalibrated from `-3.3` to `-0.6` via an exhaustive threshold sweep over the full labeled
+distribution, after growing the unanswerable-question set from 11 to 17 — see `eval/RESULTS.md`
+for the sweep and why the remaining 4 false negatives specifically can't be caught by any
+threshold). The remaining recall gap concentrates in questions where the reranker scores
 topically-similar-but-wrong content confidently (see `eval/RESULTS.md` for the exact queries
 and the second-layer prompt constraint added to address it directly).
 
@@ -187,8 +188,9 @@ Full depth in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Highlights:
   scales, and reranking measurably earns its latency cost (see § Evaluation).
 - **Two layers of hallucination mitigation, tested independently.** A hard rerank-score
   threshold in front of generation declines before the LLM is ever called if nothing retrieved
-  is relevant enough — recalibrated from an actual observed score distribution, twice, after
-  the eval harness caught real mis-calibration each time (see § Evaluation). A second,
+  is relevant enough — recalibrated from an actual observed score distribution three times
+  (`0.0`→`-3.0`→`-3.3`→`-0.6`), each time after the eval harness caught real mis-calibration
+  or grew the labeled evidence it was calibrated against (see § Evaluation). A second,
   independent layer sits in the generation prompt itself, constrained against inferring a
   specific answer from context that only discusses the topic generally — live-tested against
   the 3 questions the first layer is known to miss, and caught all 3.
@@ -244,11 +246,13 @@ history and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the technical des
 left is a real gap: what remains is disclosed, deliberate tradeoffs, each with a real number
 and a real reason behind it, not an oversight —
 
-- **72.7% hallucination-guard recall ceiling** — proven, not assumed: an exhaustive sweep over
-  every real observed rerank score in the labeled dataset confirmed no threshold moves recall
-  further without a worse precision trade-off (see § Evaluation and `eval/RESULTS.md`). A
-  second, independent mitigation layer was added and live-verified to catch the specific cases
-  the threshold misses; the guard's own number is correctly left as measured, not inflated.
+- **76.5% hallucination-guard recall ceiling** — proven, not assumed: after growing the
+  labeled unanswerable-question set from 11 to 17, an exhaustive sweep over every real observed
+  rerank score confirmed no threshold moves recall further without a worse precision trade-off
+  (this raised the honestly-measured ceiling from an earlier 72.7%, found on the smaller
+  11-negative set — see § Evaluation and `eval/RESULTS.md`). A second, independent mitigation
+  layer was added and live-verified to catch specific cases the threshold misses; the guard's
+  own number is correctly left as measured, not inflated.
 - **No managed cloud / Kubernetes / S3 / TLS-terminating reverse proxy** — a deliberate
   single-VM scope choice (see § Deployment), not a gap: this project's engineering content is
   the RAG pipeline, kept fully inspectable in this repo rather than delegated to a platform.

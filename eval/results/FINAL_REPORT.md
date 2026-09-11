@@ -6,25 +6,25 @@ Every number in this report comes from actually running the scripts in `eval/` a
 
 ## Dataset
 
-- **Questions:** 110
+- **Questions:** 116
 - **Documents:** 8
 - **Chunks indexed:** 50
-- **Answerable / unanswerable:** 99 / 11
+- **Answerable / unanswerable:** 99 / 17
 - **Question categories:**
-  - `single_chunk`: 52 (47.3%)
-  - `numerical`: 16 (14.5%)
-  - `procedural`: 12 (10.9%)
-  - `out_of_corpus`: 11 (10.0%)
-  - `cross_document_discriminator`: 6 (5.5%)
-  - `terminology_mismatch`: 6 (5.5%)
-  - `multi_chunk`: 5 (4.5%)
-  - `single_chunk_pdf_page`: 2 (1.8%)
+  - `single_chunk`: 52 (44.8%)
+  - `numerical`: 16 (13.8%)
+  - `procedural`: 12 (10.3%)
+  - `out_of_corpus`: 17 (14.7%)
+  - `cross_document_discriminator`: 6 (5.2%)
+  - `terminology_mismatch`: 6 (5.2%)
+  - `multi_chunk`: 5 (4.3%)
+  - `single_chunk_pdf_page`: 2 (1.7%)
 
 Reproduce: `eval/datasets/knowledge_base_eval.json` (static, no script needed).
 
 ## Retrieval
 
-Real local embeddings (`local:BAAI/bge-small-en-v1.5`), real BM25 (Postgres full-text), real cross-encoder reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2 (real, local model)`) — fetch depth `top_k=10`, 99 of 110 labeled queries scored (the rest are the unanswerable set, which has no relevant chunk to score recall against).
+Real local embeddings (`local:BAAI/bge-small-en-v1.5`), real BM25 (Postgres full-text), real cross-encoder reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2 (real, local model)`) — fetch depth `top_k=10`, 99 of 116 labeled queries scored (the rest are the unanswerable set, which has no relevant chunk to score recall against).
 
 | Method | Recall@1 | Recall@5 | Recall@10 | MRR | NDCG@5 | NDCG@10 | Precision@5 |
 |---|---|---|---|---|---|---|---|
@@ -51,6 +51,8 @@ Note: on this dataset the naive (non-RRF) hybrid slightly **outperforms** RRF on
 
 Real generation on a **20-query category-stratified sample** (chat backend `ollama:llama3.2:3b`, judge `ollama:llama3.2:3b (same model as generation — a small local model judging its own output; see eval/RESULTS.md's caveat on this)`) — see Limitations for why this is a sample rather than the full dataset.
 
+**Note: this sample predates the hallucination-guard run below** (generated 2026-09-03T19:53:29.768066+00:00 vs. 2026-09-11T13:48:11.880193+00:00) — it has not been re-run against the current dataset/threshold; see `eval/RESULTS.md` for what specifically would change.
+
 | Metric | All queries | Answered only |
 |---|---|---|
 | Faithfulness (groundedness) | 0.645 | 0.719 |
@@ -67,20 +69,20 @@ Reproduce: `uv run python ../eval/run_eval.py --query-ids <ids>` (from `backend/
 
 ## Hallucination Guard
 
-Full dataset (110 queries: 11 unanswerable, 99 answerable), based entirely on real retrieval + the real cross-encoder reranker's score vs. `rag_min_rerank_score=-3.3` — no LLM generation call involved in the guard's decision itself.
+Full dataset (116 queries: 17 unanswerable, 99 answerable), based entirely on real retrieval + the real cross-encoder reranker's score vs. `rag_min_rerank_score=-0.6` — no LLM generation call involved in the guard's decision itself.
 
-- **Accuracy:** 96.4%
-- **Precision:** 88.9%
-- **Recall:** 72.7%
-- **F1:** 0.800
-- **Specificity:** 99.0%
+- **Accuracy:** 93.1%
+- **Precision:** 76.5%
+- **Recall:** 76.5%
+- **F1:** 0.765
+- **Specificity:** 96.0%
 
 Confusion matrix (positive = guard declines to answer):
 
 | | Declined | Answered |
 |---|---|---|
-| **Unanswerable (should decline)** | TP=8 | FN=3 |
-| **Answerable (should answer)** | FP=1 | TN=98 |
+| **Unanswerable (should decline)** | TP=13 | FN=4 |
+| **Answerable (should answer)** | FP=4 | TN=95 |
 
 Reproduce: `uv run python ../eval/evaluate_hallucination.py` (from `backend/`).
 
@@ -100,8 +102,8 @@ Reproduce: `uv run python ../eval/benchmark_latency.py` (from `backend/`).
 
 ## Testing
 
-- **Total tests:** 219
-- **Passed:** 219
+- **Total tests:** 220
+- **Passed:** 220
 - **Failed:** 0
 - **Skipped:** 0
 - **Code coverage:** 97%
@@ -110,10 +112,10 @@ Reproduce: `uv run pytest --cov --cov-report=term-missing` (from `backend/`).
 
 ## Limitations
 
-- **Dataset size and provenance:** 110 labeled questions over 8 documents — 3 are this project's original fixture docs, 5 are additional synthetic fixture documents written specifically to grow this eval corpus with genuinely new, non-redundant material (not real company data). 110 is a deliberate stopping point, not the ~200-250 originally targeted — see the project history for the tradeoff (more real evaluation breadth vs. more labeled questions on the same corpus).
+- **Dataset size and provenance:** 116 labeled questions over 8 documents — 3 are this project's original fixture docs, 5 are additional synthetic fixture documents written specifically to grow this eval corpus with genuinely new, non-redundant material (not real company data). 116 is a deliberate stopping point, not the ~200-250 originally targeted — see the project history for the tradeoff (more real evaluation breadth vs. more labeled questions on the same corpus).
 - **Synthetic questions, human-designed ground truth:** questions and reference answers were authored against the actual document text (every `content_marker` is a verbatim substring, verified by the harness itself before any report is trusted), not generated-then-assumed-correct — but they were still authored by one person, not independently reviewed.
 - **LLM-as-judge limitations:** faithfulness/relevance/answer-correctness scores come from the same small local model (`llama3.2:3b`) that also generated the answers being judged — a real, known limitation (shared blind spots), not a synthetic-mode artifact. Treat these as a consistent, reproducible signal, not ground truth.
-- **Generation sample size:** the generation/groundedness numbers above come from a real but partial, category-stratified sample (not the full 110), because local CPU generation is slow (~1-6 minutes per query across generation + 3 judge calls) — see `eval/RESULTS.md` for the exact sample and why.
+- **Generation sample size:** the generation/groundedness numbers above come from a real but partial, category-stratified sample (not the full 116), because local CPU generation is slow (~1-6 minutes per query across generation + 3 judge calls) — see `eval/RESULTS.md` for the exact sample and why.
 - **Model dependency:** retrieval numbers reflect `BAAI/bge-small-en-v1.5` (embeddings) and `cross-encoder/ms-marco-MiniLM-L-6-v2` (reranker); generation numbers reflect `llama3.2:3b`. Different models would produce different numbers — these are not universal claims about hybrid RAG.
 - **Local hardware:** all numbers were measured on a single development machine under real but not isolated conditions (other local processes competing for CPU/memory at times) — latency numbers in particular should be read as directional, not a clean-room benchmark.
 - **Evaluation bias:** the same person who built the system also built the eval dataset and thresholds (e.g. `rag_min_rerank_score`, calibrated against this exact dataset's rerank score distribution) — there is no held-out, independently-authored test set.

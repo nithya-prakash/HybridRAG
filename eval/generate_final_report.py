@@ -163,6 +163,16 @@ def render(report: dict) -> str:
             f"(chat backend `{gmeta['chat_backend']}`, judge `{gmeta['judge_backend']}`) — "
             "see Limitations for why this is a sample rather than the full dataset."
         )
+        hall_meta = (report.get("hallucination") or {}).get("meta") or {}
+        if hall_meta.get("generated_at", "") > gmeta.get("generated_at", ""):
+            lines.append("")
+            lines.append(
+                "**Note: this sample predates the hallucination-guard run below** "
+                f"(generated {gmeta.get('generated_at', 'unknown')} vs. "
+                f"{hall_meta.get('generated_at', 'unknown')}) — it has not been re-run against "
+                "the current dataset/threshold; see `eval/RESULTS.md` for what specifically "
+                "would change."
+            )
         lines.append("")
         lines.append("| Metric | All queries | Answered only |")
         lines.append("|---|---|---|")
@@ -306,13 +316,15 @@ def render(report: dict) -> str:
     # ---- Limitations ------------------------------------------------------
     lines.append("## Limitations")
     lines.append("")
+    n_questions = ds.get("n_questions", "—")
     lines.append(
-        "- **Dataset size and provenance:** 110 labeled questions over 8 documents — 3 are "
-        "this project's original fixture docs, 5 are additional synthetic fixture documents "
-        "written specifically to grow this eval corpus with genuinely new, non-redundant "
-        "material (not real company data). 110 is a deliberate stopping point, not the ~200-250 "
-        "originally targeted — see the project history for the tradeoff (more real evaluation "
-        "breadth vs. more labeled questions on the same corpus)."
+        f"- **Dataset size and provenance:** {n_questions} labeled questions over 8 documents "
+        "— 3 are this project's original fixture docs, 5 are additional synthetic fixture "
+        "documents written specifically to grow this eval corpus with genuinely new, "
+        f"non-redundant material (not real company data). {n_questions} is a deliberate "
+        "stopping point, not the ~200-250 originally targeted — see the project history for "
+        "the tradeoff (more real evaluation breadth vs. more labeled questions on the same "
+        "corpus)."
     )
     lines.append(
         "- **Synthetic questions, human-designed ground truth:** questions and reference "
@@ -329,9 +341,9 @@ def render(report: dict) -> str:
     )
     lines.append(
         "- **Generation sample size:** the generation/groundedness numbers above come from a "
-        "real but partial, category-stratified sample (not the full 110), because local CPU "
-        "generation is slow (~1-6 minutes per query across generation + 3 judge calls) — see "
-        "`eval/RESULTS.md` for the exact sample and why."
+        f"real but partial, category-stratified sample (not the full {n_questions}), because "
+        "local CPU generation is slow (~1-6 minutes per query across generation + 3 judge "
+        "calls) — see `eval/RESULTS.md` for the exact sample and why."
     )
     lines.append(
         "- **Model dependency:** retrieval numbers reflect `BAAI/bge-small-en-v1.5` (embeddings) "
