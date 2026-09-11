@@ -240,7 +240,17 @@ is a documented manual step (no real target host in this repo to test auto-deplo
 ## Status
 
 The full planned scope is complete — see [`docs/PROGRESS.md`](docs/PROGRESS.md) for the full
-history and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the technical design. Explicitly
-deferred, not silently omitted (see `ARCHITECTURE.md`'s "What's deliberately deferred"): S3
-storage, a TLS-terminating reverse proxy, and Kubernetes/multi-region deployment (all a
-deliberate single-VM scope choice, not a gap — see § Deployment).
+history and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the technical design. Nothing
+left is a real gap: what remains is disclosed, deliberate tradeoffs, each with a real number
+and a real reason behind it, not an oversight —
+
+- **72.7% hallucination-guard recall ceiling** — proven, not assumed: an exhaustive sweep over
+  every real observed rerank score in the labeled dataset confirmed no threshold moves recall
+  further without a worse precision trade-off (see § Evaluation and `eval/RESULTS.md`). A
+  second, independent mitigation layer was added and live-verified to catch the specific cases
+  the threshold misses; the guard's own number is correctly left as measured, not inflated.
+- **No managed cloud / Kubernetes / S3 / TLS-terminating reverse proxy** — a deliberate
+  single-VM scope choice (see § Deployment), not a gap: this project's engineering content is
+  the RAG pipeline, kept fully inspectable in this repo rather than delegated to a platform.
+
+See `ARCHITECTURE.md`'s "What's deliberately deferred" for the complete list.
