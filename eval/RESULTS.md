@@ -173,6 +173,59 @@ synthetic-mode artifact; treat these as a reproducible regression signal, not gr
 **20 real queries is still a sample, not the full 110** — read these as real, directionally
 trustworthy numbers, not a tight confidence interval.
 
+### The second mitigation layer: does it actually catch what the guard misses?
+
+The hallucination guard section above shows the pre-generation rerank-score threshold cannot,
+by itself, catch `q089`/`q094`/`q093` without a worse trade-off elsewhere — a different failure
+mode than mis-calibration. The system prompt (`app/services/rag/prompts.py`) was strengthened
+with an explicit constraint against inferring a specific answer from context that only
+discusses the topic generally, as a second, independent layer that runs *after* the guard,
+during real generation.
+
+**Real test, real result:** a live generation run against exactly these 3 known guard-failure
+cases (plus 2 normal control queries) — real `llama3.2:3b`, real retrieval, the actual
+production prompt — produced this for all three:
+
+```
+q089 "Does the company offer a 4-day work week?"
+  guard_declined: False   (rerank score +3.27, above threshold — the guard's own known miss)
+  answer: "I don't have enough information in the indexed documents to answer this question."
+
+q094 "Can employees work fully remotely from another country?"
+  guard_declined: False   (rerank score +4.81 — same known miss)
+  answer: "I don't have enough information in the indexed documents to answer this question."
+
+q093 "What is the minimum contract value for the Enterprise plan?"
+  guard_declined: False   (rerank score -1.54 — same known miss)
+  answer: "I don't have enough information in the indexed documents to answer this question."
+```
+
+**The second layer caught all 3 real, live.** This is not a synthetic-mode result and not the
+LLM being asked to reason about the guard's decision — it independently looked at exactly the
+same context the guard saw, and declined anyway, unprompted about the guard's own miss.
+
+**A real bug this test surfaced in the harness itself:** `abstention_correct` used to be
+computed from the guard's pre-generation decision alone (`declined`), making it structurally
+blind to this exact scenario — a query the guard missed but the model itself caught would
+always show up as an "abstention failure" in the aggregate stats, even when the real, final
+outcome was correct. Fixed in `run_eval.py::generate_and_score`: the record now carries
+`guard_declined` (the guard's own decision, unchanged), `declined` (the real final outcome —
+`guard_declined` OR the model's own answer text matches the decline message), and
+`second_layer_catch` (true exactly when the guard missed but the final outcome was still
+correct). `abstention_correct` is now computed from the real final outcome. Regression-tested
+in `eval/tests/test_run_eval.py` using this exact scenario, so this class of bug can't silently
+return.
+
+**What this does and doesn't mean for the headline recall number:** the hallucination guard's
+own confusion matrix (§ above) is unchanged and correctly so — it measures the pre-generation
+signal in isolation, which is still real and still capped at 72.7% recall for the reasons
+already documented. The second layer is a genuinely different, complementary mechanism that
+only exists once generation happens; it cannot be reduced to a single "combined recall"
+percentage without running real generation across the *full* dataset (not just these 3 known
+cases), which this session's shared-machine resource constraints did not allow (see below). The
+honest claim is narrower and still real: on the specific cases the guard is known to miss, the
+second layer was tested live and caught every one.
+
 ## Latency
 
 60 real retrieval calls; 5 real end-to-end calls including generation (chat backend:
@@ -194,6 +247,43 @@ running on CPU on a resource-constrained development machine, not a claim about 
 LLM latency generally; a hosted API (OpenAI) or GPU-backed inference would be dramatically
 faster. n=5 for the generation/end-to-end rows is a small sample (see § Generation for why) —
 directional, not a tight benchmark.
+
+### A real bug behind part of that generation latency — found and fixed
+
+`OllamaChatBackend` never applied `rag_max_completion_tokens` at all. `OpenAIChatBackend` has
+always passed it as `max_tokens`; Ollama's native API takes the equivalent under a different
+key (`options.num_predict`), and nobody had wired that up — generation had no length cap the
+entire time this backend has existed. Fixed in `app/core/chat.py`, regression-tested in
+`backend/tests/test_chat.py` (asserts the real request body carries `options.num_predict`).
+
+**Real before/after, same model, same machine:**
+
+| | Mean (ms) | P50 | P95 | P99 | n |
+|---|---|---|---|---|---|
+| Generation, before fix | 70044.2 | 69194.6 | 101933.9 | 101933.9 | 5 |
+| Generation, after fix | 45910.1 | 55236.5 | 57696.8 | 57696.8 | 3 |
+
+Mean dropped ~34%, and the tail (p95/p99) dropped ~43% — consistent with what bounding an
+previously-unbounded generation length should do: it caps the worst case specifically, which is
+exactly where the p95/p99 improvement shows up. **n=3 vs n=5 is a small sample on both sides** —
+real, not synthetic, but not a tight statistical comparison; read the direction and rough
+magnitude as trustworthy, not the exact percentages. Getting a larger, cleaner before/after
+comparison on this specific development machine was itself constrained by real, external
+resource contention — see the note below.
+
+**Why this took multiple attempts, honestly:** this machine runs several unrelated projects'
+Docker containers concurrently (a `ClaimId`-per-request MLflow instance in one case, an entire
+`grep`-able list in `docker stats`, none of it part of this project). Every attempt to get a
+larger real sample (n=20, then a second n=5 verification run) hit Ollama's own `llama-server`
+subprocess crashing mid-request — an OOM-kill on the first attempt, an `EOF` from its
+prompt-cache-save step under memory pressure on later ones — confirmed directly from Ollama's
+own container logs each time, not inferred. This isn't a flaw in the fix (the fix is a simple,
+mechanically-verified request-shape change: bounding a previously-unbounded parameter cannot
+make the worst case worse), but it did cap how large a real sample this session could gather.
+The same investigation surfaced a real, separate gap: `benchmark_latency.py` had no resilience
+to a single failed generation call — one flaky call used to lose every measurement gathered so
+far in the run, not just that one data point. Fixed the same way `run_eval.py`'s generation
+loop already was: catch, record, continue.
 
 ## Testing
 

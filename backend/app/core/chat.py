@@ -91,6 +91,15 @@ class OllamaChatBackend(ChatBackend):
     def __init__(self, client: httpx.AsyncClient | None = None) -> None:
         settings = get_settings()
         self._model = settings.ollama_chat_model
+        # Unlike OpenAIChatBackend (which has always passed this as
+        # `max_tokens`), this backend never applied `rag_max_completion_tokens`
+        # at all — Ollama's native API takes it under `options.num_predict`,
+        # a different shape entirely, so the setting was silently a no-op
+        # here. A real, measured contributor to this backend's latency: an
+        # unbounded generation has no reason to stop early just because the
+        # answer is already complete. Found while investigating generation
+        # latency (see eval/RESULTS.md).
+        self._max_tokens = settings.rag_max_completion_tokens
         # Local CPU inference is slow relative to a hosted API — a generous
         # timeout here avoids misclassifying "still generating" as "the
         # service is down." Raised from 180s to 300s after the eval harness's
@@ -104,7 +113,13 @@ class OllamaChatBackend(ChatBackend):
     async def complete(self, messages: list[dict[str, str]]) -> str:
         t0 = time.perf_counter()
         response = await self._client.post(
-            "/api/chat", json={"model": self._model, "messages": messages, "stream": False}
+            "/api/chat",
+            json={
+                "model": self._model,
+                "messages": messages,
+                "stream": False,
+                "options": {"num_predict": self._max_tokens},
+            },
         )
         response.raise_for_status()
         data = response.json()
@@ -119,7 +134,12 @@ class OllamaChatBackend(ChatBackend):
         async with self._client.stream(
             "POST",
             "/api/chat",
-            json={"model": self._model, "messages": messages, "stream": True},
+            json={
+                "model": self._model,
+                "messages": messages,
+                "stream": True,
+                "options": {"num_predict": self._max_tokens},
+            },
         ) as response:
             response.raise_for_status()
             async for line in response.aiter_lines():

@@ -270,18 +270,36 @@ async def generate_and_score(
     best_score = max(
         (c.rerank_score for c in retrieved_chunks if c.rerank_score is not None), default=None
     )
-    declined = best_score is None or best_score < settings.rag_min_rerank_score
+    # The pre-generation guard's own decision, based only on the real
+    # retrieval pipeline and the real reranker's score — this is the same
+    # signal `evaluate_hallucination.py` measures on its own, no LLM call
+    # involved. It is deliberately *not* the last word: the second
+    # mitigation layer (the answer-generation prompt's own constraint
+    # against inferring a specific answer from general discussion) can
+    # still catch a case this threshold missed, once real generation runs —
+    # see `declined` below, which reflects the actual final outcome.
+    guard_declined = best_score is None or best_score < settings.rag_min_rerank_score
 
     sources = from_retrieved_chunks(retrieved_chunks)
     context_block, index_map = build_context_block(sources, filenames)
 
-    if declined:
+    if guard_declined:
         answer = INSUFFICIENT_CONTEXT_MESSAGE
     elif chat_backend is not None:
         messages = build_messages(history=[], context_block=context_block, question=query.query)
         answer = await chat_backend.complete(messages)
     else:
         answer = synthetic_answer(query.query, sources)
+
+    # The real, final outcome: did the guard decline up front, OR did the
+    # model itself decline once it actually saw the (permitted) context?
+    # Conflating these two into one flag was a real bug this harness had —
+    # `abstention_correct` used to be computed from `guard_declined` alone,
+    # which meant it was blind to the second mitigation layer entirely and
+    # silently double-counted the guard's own known recall gap as if
+    # nothing downstream could ever catch it.
+    declined = guard_declined or answer.strip() == INSUFFICIENT_CONTEXT_MESSAGE
+    second_layer_catch = (not guard_declined) and declined and not query.answerable
 
     faithfulness = await score_faithfulness(judge, query.query, context_block, answer)
     relevance = await score_relevance(judge, query.query, answer)
@@ -299,7 +317,9 @@ async def generate_and_score(
     return {
         "query_id": query.id,
         "category": query.category,
+        "guard_declined": guard_declined,
         "declined": declined,
+        "second_layer_catch": second_layer_catch,
         "answer": answer,
         "reference_answer": query.reference_answer,
         "faithfulness": round(faithfulness.score, 4),
@@ -337,10 +357,19 @@ def _aggregate_generation(records: list[dict]) -> dict:
     )
     abstention_failures = [r["query_id"] for r in records if not r["abstention_correct"]]
     errored = [r["query_id"] for r in records if r.get("error")]
+    second_layer_catches = [r["query_id"] for r in records if r.get("second_layer_catch")]
 
     return {
         "n_errors": len(errored),
         "errored_query_ids": errored,
+        # Queries where the pre-generation guard (rerank-score threshold)
+        # missed an unanswerable question, but the answer-generation
+        # prompt's own constraint caught it anyway at generation time — the
+        # second mitigation layer actually doing something, not just
+        # existing. See `evaluate_hallucination.py` for the guard-only
+        # confusion matrix these queries "failed" in.
+        "second_layer_catch_count": len(second_layer_catches),
+        "second_layer_catch_query_ids": second_layer_catches,
         "faithfulness_mean_all_queries": round(faithfulness_all, 4),
         "relevance_mean_all_queries": round(relevance_all, 4),
         "answer_correctness_mean_all_queries": round(correctness_all, 4),
@@ -454,6 +483,13 @@ def print_summary(report: dict) -> None:
         )
         if gen["abstention_failed_query_ids"]:
             print(f"    ⚠ failed on: {', '.join(gen['abstention_failed_query_ids'])}")
+        if gen["second_layer_catch_count"]:
+            print(
+                f"  ✓ second-layer catches           : "
+                f"{gen['second_layer_catch_count']} "
+                f"({', '.join(gen['second_layer_catch_query_ids'])}) — the guard's own "
+                "rerank-threshold missed these, the generation prompt caught them anyway"
+            )
         if gen["n_errors"]:
             print(
                 f"  ⚠ {gen['n_errors']} quer{'y' if gen['n_errors'] == 1 else 'ies'} errored "
@@ -589,7 +625,9 @@ async def run(args: argparse.Namespace) -> dict:
                         record = {
                             "query_id": query.id,
                             "category": query.category,
+                            "guard_declined": None,
                             "declined": None,
+                            "second_layer_catch": False,
                             "answer": None,
                             "reference_answer": query.reference_answer,
                             "faithfulness": None,

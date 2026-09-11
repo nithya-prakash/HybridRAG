@@ -117,7 +117,7 @@ fully runnable even with the OpenAI providers configured and no real key present
 cd backend
 uv sync --dev
 uv run alembic upgrade head
-uv run pytest                       # 209 tests, ~97% coverage
+uv run pytest                       # 220 tests, ~97% coverage
 uv run pytest --cov --cov-report=term-missing
 
 uv run pytest ../eval/tests                     # eval harness's own unit tests (metrics math)
@@ -165,12 +165,16 @@ and the second-layer prompt constraint added to address it directly).
 **Generation** (real `llama3.2:3b` via Ollama, 20-query stratified sample): faithfulness 0.719
 and answer correctness 0.719 on answered queries; citation correctness 0.788, completeness
 0.656. The 3 abstention failures in this sample are the exact same queries the hallucination
-guard's confusion matrix flagged independently — a real cross-method consistency check.
+guard's confusion matrix flagged independently — a real cross-method consistency check. A live
+test of the second mitigation layer against exactly those 3 guard-miss cases showed the
+generation prompt's own constraint catching all 3 anyway (see `eval/RESULTS.md`).
 
-**Latency:** retrieval ~8ms mean, reranking ~1.08s mean (p95 1.4s), generation ~70s mean on
-CPU-bound local `llama3.2:3b` (a hosted API or GPU inference would be much faster).
+**Latency:** retrieval ~8ms mean, reranking ~1.08s mean (p95 1.4s), generation ~46s mean (down
+from ~70s — a real bug meant the local backend never bounded output length; see
+`eval/RESULTS.md`) on CPU-bound local `llama3.2:3b` (a hosted API or GPU inference would be
+much faster).
 
-**Testing:** 219 tests, 0 failed, 97% code coverage.
+**Testing:** 220 tests, 0 failed, 97% code coverage.
 
 ## Design decisions
 
@@ -181,11 +185,13 @@ Full depth in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Highlights:
 - **Hybrid retrieval, fused with RRF, then reranked.** Dense and keyword search fail in
   complementary ways; RRF combines both rankings without calibrating incomparable score
   scales, and reranking measurably earns its latency cost (see § Evaluation).
-- **Two layers of hallucination mitigation, one deterministic.** The system prompt asks the
-  model to cite every claim (a soft constraint); a hard rerank-score threshold in front of
-  generation declines before the LLM is ever called if nothing retrieved is relevant enough.
-  That threshold was recalibrated from an actual observed score distribution after the eval
-  harness caught the original guessed value rejecting a genuinely correct answer.
+- **Two layers of hallucination mitigation, tested independently.** A hard rerank-score
+  threshold in front of generation declines before the LLM is ever called if nothing retrieved
+  is relevant enough — recalibrated from an actual observed score distribution, twice, after
+  the eval harness caught real mis-calibration each time (see § Evaluation). A second,
+  independent layer sits in the generation prompt itself, constrained against inferring a
+  specific answer from context that only discusses the topic generally — live-tested against
+  the 3 questions the first layer is known to miss, and caught all 3.
 - **An evaluation harness that's honest about its own limitations.** `eval/RESULTS.md` states
   plainly which numbers are real versus synthetic-mode mechanics validation.
 - **Multi-tenant isolation enforced at the query layer.** Every repository method requires a

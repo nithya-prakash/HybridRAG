@@ -197,6 +197,28 @@ async def test_ollama_complete_returns_content_and_posts_configured_model():
     assert captured["json"]["model"] == backend._model
     assert captured["json"]["stream"] is False
     assert captured["json"]["messages"] == [{"role": "user", "content": "hello"}]
+    # Regression test: this backend used to never apply rag_max_completion_tokens
+    # at all (OpenAIChatBackend's `max_tokens` has no Ollama equivalent — Ollama
+    # takes it as `options.num_predict`), silently leaving generation unbounded.
+    assert captured["json"]["options"]["num_predict"] == backend._max_tokens
+
+
+async def test_ollama_stream_complete_applies_num_predict_too():
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["json"] = json.loads(request.content)
+        return httpx.Response(
+            200, text='{"message": {"content": "hi"}, "done": true}\n'
+        )
+
+    client = httpx.AsyncClient(transport=_ollama_transport(handler), base_url="http://ollama:11434")
+    backend = OllamaChatBackend(client=client)
+
+    async for _ in backend.stream_complete([{"role": "user", "content": "hello"}]):
+        pass
+
+    assert captured["json"]["options"]["num_predict"] == backend._max_tokens
 
 
 async def test_ollama_complete_returns_empty_string_when_message_missing():

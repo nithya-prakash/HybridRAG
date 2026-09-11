@@ -148,6 +148,7 @@ async def run(args: argparse.Namespace) -> dict:
 
             generation_ms: list[float] = []
             end_to_end_ms: list[float] = []
+            generation_errors: list[str] = []
             if chat_backend is not None:
                 generation_sample = answerable_queries[: args.n_generation]
                 for q in generation_sample:
@@ -158,9 +159,22 @@ async def run(args: argparse.Namespace) -> dict:
                         history=[], context_block=context_block, question=q.query
                     )
 
-                    t0 = time.perf_counter()
-                    await chat_backend.complete(messages)
-                    gen_ms = round((time.perf_counter() - t0) * 1000, 2)
+                    try:
+                        t0 = time.perf_counter()
+                        await chat_backend.complete(messages)
+                        gen_ms = round((time.perf_counter() - t0) * 1000, 2)
+                    except Exception as exc:  # noqa: BLE001 - same reasoning as run_eval.py's
+                        # per-query resilience: a real backend can hang/error under
+                        # sustained CPU-bound local inference (see eval/RESULTS.md), and
+                        # this script previously lost every real measurement gathered so
+                        # far to a single such failure instead of reporting them.
+                        print(
+                            f"warning: generation call failed for {q.id} "
+                            f"({exc.__class__.__name__}: {exc}) — skipping, continuing",
+                            file=sys.stderr,
+                        )
+                        generation_errors.append(q.id)
+                        continue
                     generation_ms.append(gen_ms)
                     end_to_end_ms.append(round(result.timings_ms["total_ms"] + gen_ms, 2))
         finally:
@@ -174,6 +188,8 @@ async def run(args: argparse.Namespace) -> dict:
             "reranker": reranker_label,
             "n_retrieval_samples": len(retrieval_sample),
             "n_generation_samples": len(generation_ms),
+            "n_generation_errors": len(generation_errors),
+            "generation_error_query_ids": generation_errors,
         },
         "latency_ms": {
             "embed_query": _stats(stage_ms["embed_query_ms"]),
@@ -230,6 +246,12 @@ def print_summary(report: dict) -> None:
         print()
         print("⚠  Generation/end-to-end latency: no real chat backend was reachable for")
         print("   this run — see eval/RESULTS.md for how to get real numbers here.")
+    if meta["n_generation_errors"]:
+        print()
+        print(
+            f"⚠  {meta['n_generation_errors']} generation call(s) failed and were skipped "
+            f"(not fatal to the run): {', '.join(meta['generation_error_query_ids'])}"
+        )
     print("=" * 72)
     print()
 
