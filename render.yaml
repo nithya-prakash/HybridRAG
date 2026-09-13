@@ -30,10 +30,12 @@ services:
     dockerfilePath: ./infra/docker/backend.Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    # Runs once before each deploy, ahead of the new instance receiving
-    # traffic — the managed-PaaS equivalent of docker-compose.prod.yml's
-    # one-shot `migrate` service.
-    preDeployCommand: alembic upgrade head
+    # Render's free plan doesn't support preDeployCommand (a paid-plan-only
+    # feature), so migrations run as part of the container's own start
+    # command instead — safe to repeat on every boot since `alembic upgrade
+    # head` no-ops once the schema is already current. The managed-PaaS
+    # equivalent of docker-compose.prod.yml's one-shot `migrate` service.
+    dockerCommand: "sh -c 'alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000'"
     envVars:
       - key: ENVIRONMENT
         value: production
