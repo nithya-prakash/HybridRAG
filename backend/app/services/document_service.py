@@ -2,6 +2,7 @@ import uuid
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import get_settings
 from app.core.file_validation import (
@@ -78,14 +79,46 @@ class DocumentService:
 
         from app.tasks.document_processing import process_document
 
-        # Threads this HTTP request's id through to the async task, so a
-        # single upload's logs — the request that enqueued it, and every log
-        # line the worker emits while actually processing it, possibly
-        # seconds or minutes later in a different process — share one
-        # `request_id` and can be traced together. See
-        # RequestContextMiddleware and app/tasks/document_processing.py.
+        # Threads this HTTP request's id through to the task, so a single
+        # upload's logs — the request that enqueued it, and every log line
+        # emitted while actually processing it — share one `request_id` and
+        # can be traced together. See RequestContextMiddleware and
+        # app/tasks/document_processing.py.
         request_id = structlog.contextvars.get_contextvars().get("request_id")
-        process_document.delay(str(document.id), document.version, request_id=request_id)
+
+        if settings.celery_task_always_eager:
+            # No separate worker process in this deployment (see
+            # celery_task_always_eager's docstring in app/core/config.py) —
+            # run the task function directly instead of enqueueing it.
+            # Calling it inline on this coroutine would still break: the
+            # task bridges into async code via asyncio.run() (see
+            # app/tasks/document_processing.py::_with_session), which
+            # cannot be called from within a loop that's already running —
+            # exactly the loop this request handler is running on. Running
+            # it in a threadpool thread instead gives it a thread with no
+            # event loop of its own, so its own asyncio.run() works exactly
+            # as it does in a real worker process.
+            await run_in_threadpool(
+                process_document, str(document.id), document.version, request_id=request_id
+            )
+            # process_document runs its whole body inside its own throwaway
+            # asyncio.run() loop (see app/core/celery_app.py's docstring on
+            # this exact failure mode, and tests/test_document_processing_
+            # task.py's, which documents hitting it directly). get_vector_
+            # store()'s AsyncQdrantClient is a process-wide @lru_cache
+            # singleton — the first real call through it binds its httpx
+            # transport to whichever loop made that call. Called from here,
+            # that's the task's own throwaway loop, which is closed by the
+            # time run_in_threadpool returns above: the *next* caller on
+            # this request's actual (main) loop — e.g. this same request's
+            # eventual retrieval — would hit "RuntimeError: Event loop is
+            # closed" reusing that now-dead connection. Clearing the cache
+            # forces the next real caller, on whichever loop it's actually
+            # running on, to construct a fresh client instead.
+            get_vector_store.cache_clear()
+            await self._session.refresh(document)
+        else:
+            process_document.delay(str(document.id), document.version, request_id=request_id)
 
         return document
 

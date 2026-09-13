@@ -44,6 +44,19 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/1"
+    # False (default) is the real async setup: .delay() enqueues to the
+    # broker, a separate celery worker process consumes it. True runs the
+    # task synchronously in whichever process called .delay() instead — no
+    # worker process at all. Exists for deployments too small to run API
+    # and worker as separate processes (see docs/DEPLOY_FREE_TIER.md): a
+    # free Render web service has no free worker instance type, and running
+    # both in one container each load their own copy of the embedding
+    # model, which reliably exceeds the free tier's 512MB and gets
+    # OOM-killed on the first real upload — verified, not theoretical (see
+    # commit history). Eager mode avoids the second process (and its second
+    # model copy) entirely, at the cost of the upload request blocking
+    # until processing finishes rather than returning immediately.
+    celery_task_always_eager: bool = False
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"

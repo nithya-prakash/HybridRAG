@@ -7,6 +7,7 @@ from httpx import AsyncClient
 
 from app.core.config import get_settings
 from app.core.vector_store import EmbeddedChunk, get_vector_store
+from app.models.document import DocumentStatus
 from tests.helpers import new_client
 
 PASSWORD = "correcthorsebattery"
@@ -50,6 +51,38 @@ async def test_upload_accepts_each_supported_type(client: AsyncClient, file_type
     assert body["status"] == "uploaded"
     assert body["version"] == 1
     assert body["error_message"] is None
+
+
+async def test_upload_processes_in_process_when_celery_task_always_eager(
+    client: AsyncClient, monkeypatch
+):
+    # No celery worker involved at all here (none is running in the test
+    # suite) — with celery_task_always_eager=True, document_service.upload
+    # runs process_document itself, in a threadpool thread, inline within
+    # this same request (see document_service.py). If that actually works —
+    # no nested-event-loop crash, no worker needed — the document reaches
+    # READY by the time the upload response comes back, no polling required.
+    monkeypatch.setattr(get_settings(), "celery_task_always_eager", True)
+    await _register_and_login(client, "eager-mode@example.com")
+
+    response = await client.post(
+        "/documents/upload", files=_upload_files("policy.md", b"# Vacation\n\n22 days per year.")
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["status"] == DocumentStatus.READY.value
+    assert body["error_message"] is None
+
+    # Regression check: process_document runs inside its own throwaway
+    # asyncio.run() loop (see the get_vector_store.cache_clear() call and
+    # its comment in document_service.py). Before that cache_clear was
+    # added, get_vector_store()'s cached AsyncQdrantClient stayed bound to
+    # that now-closed loop, and the very next real call through it — like
+    # this one, on the test's own loop — raised "RuntimeError: Event loop
+    # is closed" rather than actually querying Qdrant.
+    count = await get_vector_store().count_for_document(uuid.UUID(body["id"]))
+    assert count == 1
 
 
 async def test_upload_rejects_unsupported_extension(client: AsyncClient):

@@ -1,8 +1,8 @@
 # Render Blueprint for a free, publicly reachable HybridRAG demo — a
 # separate deployment path from docker-compose.prod.yml's single-VM target
 # (see README.md § Deployment for why that one's the justified default for
-# a real production deploy). This one swaps three pieces to fit entirely on
-# free tiers:
+# a real production deploy). This one swaps several pieces to fit entirely
+# on free tiers:
 #   - Ollama (4GB+ RAM, doesn't fit a free web service) -> Groq
 #     (CHAT_PROVIDER=groq), OpenAI-compatible, no self-hosted LLM needed.
 #   - Redis -> Upstash's free serverless Redis (Render's own Redis has no
@@ -10,6 +10,13 @@
 #     shape, just point them at Upstash's `rediss://` connection string.
 #   - Qdrant -> Qdrant Cloud's free 1GB cluster, same QDRANT_URL/
 #     QDRANT_API_KEY the app already expects.
+#   - No separate celery worker service: Render's free tier has no free
+#     background-worker instance type at all (paid plans only), and running
+#     one alongside uvicorn in the web service's own container was tried and
+#     verified OOM-killed on the first real upload (two processes, two
+#     copies of the embedding model, over the free tier's 512MB). Instead,
+#     CELERY_TASK_ALWAYS_EAGER=true runs document processing in-process —
+#     see celery_task_always_eager's docstring in app/core/config.py.
 # The Next.js frontend is deployed separately on Vercel (native Next.js
 # support), not here — see docs/DEPLOY_FREE_TIER.md.
 #
@@ -72,34 +79,5 @@ services:
         value: groq
       - key: GROQ_API_KEY
         sync: false
-
-  - type: worker
-    name: hybridrag-celery-worker
-    runtime: docker
-    plan: free
-    dockerfilePath: ./infra/docker/backend.Dockerfile
-    dockerContext: .
-    dockerCommand: celery -A app.core.celery_app worker --loglevel=info
-    envVars:
-      - key: ENVIRONMENT
-        value: production
-      - key: POSTGRES_URL
-        fromDatabase:
-          name: hybridrag-postgres
-          property: connectionString
-      - key: REDIS_URL
-        sync: false
-      - key: CELERY_BROKER_URL
-        sync: false
-      - key: CELERY_RESULT_BACKEND
-        sync: false
-      - key: QDRANT_URL
-        sync: false
-      - key: QDRANT_API_KEY
-        sync: false
-      - key: EMBEDDING_PROVIDER
-        value: local
-      - key: CHAT_PROVIDER
-        value: groq
-      - key: GROQ_API_KEY
-        sync: false
+      - key: CELERY_TASK_ALWAYS_EAGER
+        value: "true"
