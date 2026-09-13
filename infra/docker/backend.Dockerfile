@@ -49,13 +49,14 @@ RUN groupadd --system app && useradd --system --gid app app
 WORKDIR /app
 
 COPY --from=builder /app /app
+COPY infra/docker/render-start.sh ./render-start.sh
 ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache \
     HF_HOME=/app/.hf_cache \
     HF_HUB_OFFLINE=1
 
-RUN mkdir -p /data/uploads && chown -R app:app /app /data
+RUN chmod +x ./render-start.sh && mkdir -p /data/uploads && chown -R app:app /app /data
 
 USER app
 

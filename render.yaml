@@ -35,7 +35,7 @@ services:
     # command instead — safe to repeat on every boot since `alembic upgrade
     # head` no-ops once the schema is already current. The managed-PaaS
     # equivalent of docker-compose.prod.yml's one-shot `migrate` service.
-    dockerCommand: "sh -c 'alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000'"
+    dockerCommand: ./render-start.sh
     envVars:
       - key: ENVIRONMENT
         value: production
