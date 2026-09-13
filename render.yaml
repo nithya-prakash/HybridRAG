@@ -44,7 +44,12 @@ services:
       - key: COOKIE_SECURE
         value: "true"
       - key: CORS_ORIGINS
-        sync: false # e.g. ["https://your-app.vercel.app"]
+        # `sync: false` with no default lands as an empty string, which
+        # crashes Settings() at import time — cors_origins is list[str],
+        # JSON-parsed from the env var, and "" isn't valid JSON. A real
+        # default avoids that; update this in the Render dashboard once
+        # the Vercel frontend URL exists (see docs/DEPLOY_FREE_TIER.md).
+        value: '["http://localhost:3000"]'
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: POSTGRES_URL
