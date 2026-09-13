@@ -1,0 +1,98 @@
+# Render Blueprint for a free, publicly reachable HybridRAG demo — a
+# separate deployment path from docker-compose.prod.yml's single-VM target
+# (see README.md § Deployment for why that one's the justified default for
+# a real production deploy). This one swaps three pieces to fit entirely on
+# free tiers:
+#   - Ollama (4GB+ RAM, doesn't fit a free web service) -> Groq
+#     (CHAT_PROVIDER=groq), OpenAI-compatible, no self-hosted LLM needed.
+#   - Redis -> Upstash's free serverless Redis (Render's own Redis has no
+#     free tier), same REDIS_URL/CELERY_BROKER_URL/CELERY_RESULT_BACKEND
+#     shape, just point them at Upstash's `rediss://` connection string.
+#   - Qdrant -> Qdrant Cloud's free 1GB cluster, same QDRANT_URL/
+#     QDRANT_API_KEY the app already expects.
+# The Next.js frontend is deployed separately on Vercel (native Next.js
+# support), not here — see docs/DEPLOY_FREE_TIER.md.
+#
+# Usage: Render dashboard -> New -> Blueprint -> point at this repo. Render
+# provisions everything below and prompts for every `sync: false` value.
+
+databases:
+  - name: hybridrag-postgres
+    plan: free
+    databaseName: rag
+    user: rag
+
+services:
+  - type: web
+    name: hybridrag-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./infra/docker/backend.Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Runs once before each deploy, ahead of the new instance receiving
+    # traffic — the managed-PaaS equivalent of docker-compose.prod.yml's
+    # one-shot `migrate` service.
+    preDeployCommand: alembic upgrade head
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: CORS_ORIGINS
+        sync: false # e.g. ["https://your-app.vercel.app"]
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: hybridrag-postgres
+          property: connectionString
+      - key: REDIS_URL
+        sync: false # Upstash "rediss://" URL, database 0
+      - key: CELERY_BROKER_URL
+        sync: false # same Upstash URL as REDIS_URL
+      - key: CELERY_RESULT_BACKEND
+        sync: false # same Upstash URL, database 1 if supported, else 0
+      - key: QDRANT_URL
+        sync: false # Qdrant Cloud cluster URL
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: CHAT_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+
+  - type: worker
+    name: hybridrag-celery-worker
+    runtime: docker
+    plan: free
+    dockerfilePath: ./infra/docker/backend.Dockerfile
+    dockerContext: .
+    dockerCommand: celery -A app.core.celery_app worker --loglevel=info
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: POSTGRES_URL
+        fromDatabase:
+          name: hybridrag-postgres
+          property: connectionString
+      - key: REDIS_URL
+        sync: false
+      - key: CELERY_BROKER_URL
+        sync: false
+      - key: CELERY_RESULT_BACKEND
+        sync: false
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: CHAT_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false

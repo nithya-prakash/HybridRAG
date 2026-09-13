@@ -29,6 +29,12 @@ class ChatBackend(ABC):
 
 
 class OpenAIChatBackend(ChatBackend):
+    """Also the base class for any other OpenAI-compatible chat API
+    (see `GroqChatBackend` below) — same request/response shape, just a
+    different base_url, API key, and model name."""
+
+    _provider_name = "openai"
+
     def __init__(self, client: AsyncOpenAI | None = None) -> None:
         settings = get_settings()
         self._model = settings.openai_chat_model
@@ -40,14 +46,14 @@ class OpenAIChatBackend(ChatBackend):
         response = await self._client.chat.completions.create(
             model=self._model, messages=messages, max_tokens=self._max_tokens
         )
-        LLM_CALL_DURATION_SECONDS.labels("openai", "chat_complete").observe(
+        LLM_CALL_DURATION_SECONDS.labels(self._provider_name, "chat_complete").observe(
             time.perf_counter() - t0
         )
         if response.usage is not None:
-            LLM_TOKENS_TOTAL.labels("openai", "chat_complete", "prompt").inc(
+            LLM_TOKENS_TOTAL.labels(self._provider_name, "chat_complete", "prompt").inc(
                 response.usage.prompt_tokens
             )
-            LLM_TOKENS_TOTAL.labels("openai", "chat_complete", "completion").inc(
+            LLM_TOKENS_TOTAL.labels(self._provider_name, "chat_complete", "completion").inc(
                 response.usage.completion_tokens
             )
         return response.choices[0].message.content or ""
@@ -66,10 +72,10 @@ class OpenAIChatBackend(ChatBackend):
         )
         async for chunk in stream:
             if chunk.usage is not None:
-                LLM_TOKENS_TOTAL.labels("openai", "chat_stream", "prompt").inc(
+                LLM_TOKENS_TOTAL.labels(self._provider_name, "chat_stream", "prompt").inc(
                     chunk.usage.prompt_tokens
                 )
-                LLM_TOKENS_TOTAL.labels("openai", "chat_stream", "completion").inc(
+                LLM_TOKENS_TOTAL.labels(self._provider_name, "chat_stream", "completion").inc(
                     chunk.usage.completion_tokens
                 )
             if not chunk.choices:
@@ -77,7 +83,29 @@ class OpenAIChatBackend(ChatBackend):
             delta = chunk.choices[0].delta.content
             if delta:
                 yield delta
-        LLM_CALL_DURATION_SECONDS.labels("openai", "chat_stream").observe(time.perf_counter() - t0)
+        LLM_CALL_DURATION_SECONDS.labels(self._provider_name, "chat_stream").observe(
+            time.perf_counter() - t0
+        )
+
+
+class GroqChatBackend(OpenAIChatBackend):
+    """Groq's API is OpenAI-compatible (same `/chat/completions` shape), so
+    this only overrides the client construction and model — `complete` and
+    `stream_complete` are inherited as-is from `OpenAIChatBackend`. Used in
+    place of `OllamaChatBackend` for deployments where Ollama's 4GB+ RAM
+    footprint doesn't fit (e.g. a free hosting tier), without taking on
+    OpenAI's per-token cost for a portfolio demo."""
+
+    _provider_name = "groq"
+
+    def __init__(self, client: AsyncOpenAI | None = None) -> None:
+        settings = get_settings()
+        self._model = settings.groq_chat_model
+        self._max_tokens = settings.rag_max_completion_tokens
+        self._client = client or AsyncOpenAI(
+            api_key=settings.groq_api_key,
+            base_url="https://api.groq.com/openai/v1",
+        )
 
 
 class OllamaChatBackend(ChatBackend):
@@ -171,4 +199,6 @@ def get_chat_backend() -> ChatBackend:
     settings = get_settings()
     if settings.chat_provider == "openai":
         return OpenAIChatBackend()
+    if settings.chat_provider == "groq":
+        return GroqChatBackend()
     return OllamaChatBackend()

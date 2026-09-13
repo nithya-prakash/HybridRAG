@@ -5,7 +5,13 @@ from unittest.mock import AsyncMock
 import httpx
 import pytest
 
-from app.core.chat import ChatBackend, OllamaChatBackend, OpenAIChatBackend, get_chat_backend
+from app.core.chat import (
+    ChatBackend,
+    GroqChatBackend,
+    OllamaChatBackend,
+    OpenAIChatBackend,
+    get_chat_backend,
+)
 from app.core.config import get_settings
 from app.core.metrics import LLM_TOKENS_TOTAL
 
@@ -144,6 +150,60 @@ async def test_stream_complete_records_token_usage_from_final_chunk():
     )
 
 
+# --- GroqChatBackend ---
+# Inherits complete/stream_complete from OpenAIChatBackend unchanged (Groq's
+# API is OpenAI-compatible) — these just check the provider-specific wiring:
+# a different client/model, and metrics recorded under "groq" rather than
+# "openai" so a dashboard can tell the two apart.
+
+
+async def test_groq_complete_uses_configured_model_and_client():
+    client = AsyncMock()
+    client.chat.completions.create.return_value = _completion_response("hi from groq")
+    backend = GroqChatBackend(client=client)
+
+    result = await backend.complete([{"role": "user", "content": "hello"}])
+
+    assert result == "hi from groq"
+    _, kwargs = client.chat.completions.create.call_args
+    assert kwargs["model"] == backend._model == get_settings().groq_chat_model
+
+
+async def test_groq_complete_records_token_usage_under_groq_label():
+    client = AsyncMock()
+    client.chat.completions.create.return_value = _completion_response(
+        "answer", prompt_tokens=13, completion_tokens=7
+    )
+    backend = GroqChatBackend(client=client)
+
+    prompt_before = LLM_TOKENS_TOTAL.labels("groq", "chat_complete", "prompt")._value.get()
+
+    await backend.complete([{"role": "user", "content": "hi"}])
+
+    assert (
+        LLM_TOKENS_TOTAL.labels("groq", "chat_complete", "prompt")._value.get()
+        == prompt_before + 13
+    )
+
+
+async def test_groq_stream_complete_yields_deltas_in_order():
+    client = AsyncMock()
+    client.chat.completions.create.return_value = _stream_chunks(["Hel", "lo"])
+    backend = GroqChatBackend(client=client)
+
+    deltas = [d async for d in backend.stream_complete([{"role": "user", "content": "hi"}])]
+
+    assert deltas == ["Hel", "lo"]
+
+
+def test_groq_backend_targets_groq_api_base_url(monkeypatch):
+    monkeypatch.setattr(get_settings(), "groq_api_key", "gsk-test-fake-key")
+
+    backend = GroqChatBackend()
+
+    assert str(backend._client.base_url) == "https://api.groq.com/openai/v1/"
+
+
 def test_get_chat_backend_returns_a_chat_backend_singleton(monkeypatch):
     monkeypatch.setattr(get_settings(), "openai_api_key", "sk-test-fake-key")
     monkeypatch.setattr(get_settings(), "chat_provider", "openai")
@@ -153,6 +213,18 @@ def test_get_chat_backend_returns_a_chat_backend_singleton(monkeypatch):
         assert isinstance(backend, ChatBackend)
         assert isinstance(backend, OpenAIChatBackend)
         assert get_chat_backend() is backend
+    finally:
+        get_chat_backend.cache_clear()
+
+
+def test_get_chat_backend_returns_groq_backend(monkeypatch):
+    monkeypatch.setattr(get_settings(), "groq_api_key", "gsk-test-fake-key")
+    monkeypatch.setattr(get_settings(), "chat_provider", "groq")
+    get_chat_backend.cache_clear()
+    try:
+        backend = get_chat_backend()
+        assert isinstance(backend, ChatBackend)
+        assert isinstance(backend, GroqChatBackend)
     finally:
         get_chat_backend.cache_clear()
 

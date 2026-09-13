@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -22,6 +22,23 @@ class Settings(BaseSettings):
 
     # Postgres
     postgres_url: str = "postgresql+asyncpg://rag:rag@localhost:5432/rag"
+
+    @field_validator("postgres_url")
+    @classmethod
+    def _require_asyncpg_driver(cls, v: str) -> str:
+        # Every managed Postgres provider (Render, Railway, Heroku, ...)
+        # hands out a plain postgres:// or postgresql:// connection string —
+        # never the +asyncpg driver suffix SQLAlchemy's async engine
+        # requires. Rewriting it here means POSTGRES_URL can be wired
+        # straight from a provider's connection-string env var without a
+        # manual edit, instead of failing at engine creation with a cryptic
+        # "no such driver" error the first time this app runs somewhere
+        # other than the docker-compose stack that always set it correctly.
+        if v.startswith("postgres://"):
+            return "postgresql+asyncpg://" + v[len("postgres://") :]
+        if v.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + v[len("postgresql://") :]
+        return v
 
     # Redis / Celery
     redis_url: str = "redis://localhost:6379/0"
@@ -62,16 +79,24 @@ class Settings(BaseSettings):
     # Chat / generation — provider selection. "ollama" (default) talks to a
     # local Ollama server (see infra/docker-compose.yml's `ollama` service)
     # — free, no API key, fully self-contained. "openai" uses the OpenAI
-    # chat completions API instead. Both implement the same `ChatBackend`
-    # interface (`app/core/chat.py`), so nothing downstream of
+    # chat completions API instead. "groq" talks to Groq's hosted API, which
+    # is OpenAI-compatible (same request/response shape, different base_url)
+    # — used for deployments where running Ollama isn't an option (its 4GB+
+    # RAM footprint doesn't fit a free hosting tier) but a real API key with
+    # per-token cost isn't wanted either. All three implement the same
+    # `ChatBackend` interface (`app/core/chat.py`), so nothing downstream of
     # `get_chat_backend()` needs to know or care which one is active.
-    chat_provider: Literal["ollama", "openai"] = "ollama"
+    chat_provider: Literal["ollama", "openai", "groq"] = "ollama"
     ollama_base_url: str = "http://ollama:11434"
     # A small instruction-tuned model, chosen for reasonable CPU inference
     # latency in a self-hosted/portfolio context — swap for a larger model
     # (env var, no code change) if better answer quality matters more than
     # speed and more RAM/CPU is available.
     ollama_chat_model: str = "llama3.2:3b"
+
+    # Groq
+    groq_api_key: str | None = None
+    groq_chat_model: str = "llama-3.3-70b-versatile"
 
     # Auth
     jwt_secret_key: str = "change-me-in-env"

@@ -231,6 +231,12 @@ CI builds and pushes tagged backend/frontend images to GHCR on every merge to `m
 lint, the full test suite, and dependency audits pass. Rolling a new image onto a running VM
 is a documented manual step (no real target host in this repo to test auto-deploy against).
 
+**Free-tier live demo:** a separate deployment path (Render + Qdrant Cloud + Upstash + Vercel,
+Groq instead of self-hosted Ollama) exists specifically for a zero-cost, publicly reachable
+instance — see [`docs/DEPLOY_FREE_TIER.md`](docs/DEPLOY_FREE_TIER.md) and `render.yaml`. It
+trades some of the hardening above for $0/month; the single-VM path is still the one to use
+for an actual production deployment.
+
 ## Project structure
 
 ```
