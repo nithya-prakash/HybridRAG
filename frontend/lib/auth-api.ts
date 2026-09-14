@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError, csrfHeaders, parseErrorDetail } from "./api";
+import { API_BASE_URL, ApiError, captureCsrfToken, csrfHeaders, parseErrorDetail } from "./api";
 
 export interface User {
   id: string;
@@ -17,6 +17,7 @@ async function authFetch(path: string, init?: RequestInit): Promise<Response> {
       ...init?.headers,
     },
   });
+  captureCsrfToken(res);
   if (!res.ok) {
     throw new ApiError(res.status, await parseErrorDetail(res));
   }
@@ -48,6 +49,7 @@ export async function fetchMe(): Promise<User | null> {
     credentials: "include",
     cache: "no-store",
   });
+  captureCsrfToken(res);
   if (res.status === 401) return null;
   if (!res.ok) throw new ApiError(res.status, await parseErrorDetail(res));
   return res.json();

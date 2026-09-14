@@ -1,5 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { API_BASE_URL, csrfHeaders } from "./api";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  API_BASE_URL,
+  _resetCsrfTokenForTests,
+  captureCsrfToken,
+  csrfHeaders,
+} from "./api";
 
 describe("API_BASE_URL", () => {
   it("has a value", () => {
@@ -7,42 +12,39 @@ describe("API_BASE_URL", () => {
   });
 });
 
-function stubCookie(value: string) {
-  vi.stubGlobal("document", { cookie: value });
-}
-
-describe("csrfHeaders", () => {
+// captureCsrfToken/csrfHeaders hold the token in memory rather than reading
+// document.cookie — a cross-origin frontend (see docs/DEPLOY_FREE_TIER.md)
+// can never read a cookie set by a different origin, so the only value it
+// can ever learn is whatever the backend's CsrfMiddleware (backend/app/core/
+// csrf.py) echoes back as the X-CSRF-Token *response* header the first time
+// it issues one. These tests build real Response objects (Node's global
+// fetch API, not a mock) to exercise exactly what a fetch() call site sees.
+describe("captureCsrfToken / csrfHeaders", () => {
   afterEach(() => {
-    vi.unstubAllGlobals();
+    _resetCsrfTokenForTests();
   });
 
-  it("returns an empty object when document is unavailable (SSR)", () => {
-    // vitest's default "node" environment already has no `document` global
-    // — this is the real SSR case, not a simulation of one.
+  it("returns an empty object before any response has carried a token", () => {
     expect(csrfHeaders()).toEqual({});
   });
 
-  it("returns an empty object when no csrf_token cookie is set", () => {
-    stubCookie("other=1");
+  it("is a no-op when a response carries no X-CSRF-Token header", () => {
+    captureCsrfToken(new Response(null));
 
     expect(csrfHeaders()).toEqual({});
   });
 
-  it("reads the csrf_token cookie into an X-CSRF-Token header", () => {
-    stubCookie("csrf_token=abc123");
+  it("captures the token from a response header", () => {
+    captureCsrfToken(new Response(null, { headers: { "X-CSRF-Token": "abc123" } }));
 
     expect(csrfHeaders()).toEqual({ "X-CSRF-Token": "abc123" });
   });
 
-  it("URL-decodes the cookie value", () => {
-    stubCookie(`csrf_token=${encodeURIComponent("a+b/c=d")}`);
+  it("keeps the most recently captured token across multiple responses", () => {
+    captureCsrfToken(new Response(null, { headers: { "X-CSRF-Token": "first" } }));
+    captureCsrfToken(new Response(null)); // e.g. a later request, cookie already set — no-op
+    captureCsrfToken(new Response(null, { headers: { "X-CSRF-Token": "second" } }));
 
-    expect(csrfHeaders()).toEqual({ "X-CSRF-Token": "a+b/c=d" });
-  });
-
-  it("picks csrf_token out among other cookies, regardless of position", () => {
-    stubCookie("other=1; csrf_token=the-real-token; another=2");
-
-    expect(csrfHeaders()).toEqual({ "X-CSRF-Token": "the-real-token" });
+    expect(csrfHeaders()).toEqual({ "X-CSRF-Token": "second" });
   });
 });

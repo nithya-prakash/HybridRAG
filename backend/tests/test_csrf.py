@@ -15,6 +15,49 @@ async def test_safe_method_issues_a_csrf_cookie():
         assert ac.cookies.get("csrf_token")
 
 
+async def test_safe_method_also_echoes_csrf_token_as_response_header():
+    # The only way a cross-origin frontend (e.g. Vercel calling a Render
+    # backend — see docs/DEPLOY_FREE_TIER.md) can ever learn this value: it
+    # can never read a cookie set by a different origin via document.cookie,
+    # regardless of SameSite/Secure, so the token must also be readable from
+    # the response itself.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.get("/health")
+
+        header_token = resp.headers.get("x-csrf-token")
+        assert header_token
+        assert header_token == resp.cookies.get("csrf_token")
+
+
+async def test_csrf_token_header_is_exposed_via_cors():
+    # A browser's fetch() only exposes a browser-standard "safelisted" set
+    # of response headers to cross-origin JS by default — X-CSRF-Token isn't
+    # one of them, so without Access-Control-Expose-Headers (main.py) a
+    # cross-origin frontend would see this same header on the wire but
+    # res.headers.get("X-CSRF-Token") would return null anyway.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        resp = await ac.get("/health", headers={"Origin": "http://localhost:3000"})
+
+        exposed = resp.headers.get("access-control-expose-headers", "")
+        assert "x-csrf-token" in exposed.lower()
+
+
+async def test_csrf_token_header_not_resent_once_cookie_already_set():
+    # Only the request that *issues* the cookie needs to echo it as a
+    # header too — once the browser already holds the cookie (and, for a
+    # cross-origin frontend, its in-memory copy), re-sending the header on
+    # every single response would work but is pointless traffic.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        first = await ac.get("/health")
+        assert first.headers.get("x-csrf-token")
+
+        second = await ac.get("/health")
+        assert second.headers.get("x-csrf-token") is None
+
+
 async def test_unsafe_method_without_csrf_header_is_rejected():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

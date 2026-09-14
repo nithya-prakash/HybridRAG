@@ -1,4 +1,4 @@
-import { API_BASE_URL, ApiError, csrfHeaders, parseErrorDetail } from "./api";
+import { API_BASE_URL, ApiError, captureCsrfToken, csrfHeaders, parseErrorDetail } from "./api";
 
 export interface Conversation {
   id: string;
@@ -38,6 +38,7 @@ async function conversationsFetch(path: string, init?: RequestInit): Promise<Res
     credentials: "include",
     headers: { ...csrfHeaders(), ...init?.headers },
   });
+  captureCsrfToken(res);
   if (!res.ok) {
     throw new ApiError(res.status, await parseErrorDetail(res));
   }
@@ -100,6 +101,7 @@ export async function streamMessage(
     callbacks.onError("Could not reach the server.");
     return;
   }
+  captureCsrfToken(res);
 
   if (!res.ok || !res.body) {
     callbacks.onError(await parseErrorDetail(res));

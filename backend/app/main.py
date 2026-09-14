@@ -108,6 +108,13 @@ def _wrap_with_outer_middleware(inner_app: FastAPI) -> ASGIApp:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Without this, a cross-origin frontend's fetch() can't read the
+        # X-CSRF-Token response header CsrfMiddleware sets (app/core/csrf.py)
+        # — only a browser-standard "safelisted" set of response headers is
+        # visible to JS on a cross-origin response by default, and this
+        # isn't one of them. A same-origin deployment doesn't need this (it
+        # reads document.cookie instead), but costs nothing to also expose.
+        expose_headers=["X-CSRF-Token"],
     )
     return wrapped
 

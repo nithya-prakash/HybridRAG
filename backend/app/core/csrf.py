@@ -23,15 +23,26 @@ class CsrfMiddleware(BaseHTTPMiddleware):
     operator setting `cookie_samesite=none` for a legitimate cross-subdomain
     need).
 
-    The token is issued as a *non-httpOnly* cookie deliberately — same-origin
-    JS must be able to read it (via `document.cookie`) to echo it back as a
-    request header, which is exactly the property that defeats a cross-site
-    attacker: same-origin policy stops attacker-controlled JS from reading a
-    victim's cookies, so only a legitimate same-origin request can construct
-    a header that matches the cookie. The JWT auth cookies remain httpOnly
+    The token is issued as a *non-httpOnly* cookie deliberately — frontend
+    JS must be able to get its value somehow to echo it back as a request
+    header. For a same-origin frontend that's `document.cookie`. But this
+    app can also be deployed with the frontend and API on two different
+    origins entirely (e.g. Vercel + Render — see docs/DEPLOY_FREE_TIER.md),
+    and a page can never read a cookie set by a *different* origin,
+    regardless of its SameSite/Secure attributes — that's not a CSRF
+    property, it's a basic same-origin-policy fact about `document.cookie`
+    itself. So the value is *also* echoed back as an `X-CSRF-Token`
+    *response* header the first time it's issued (see below), which CORS
+    can expose cross-origin (`Access-Control-Expose-Headers` —
+    app/main.py) even though the cookie itself stays unreadable there. A
+    same-origin frontend can use either source; a cross-origin one only has
+    the header. Either way, what actually defeats a cross-site attacker is
+    unchanged: only a legitimate request — one the real frontend, same- or
+    cross-origin, made and read the response of — can end up knowing a
+    value that matches the cookie. The JWT auth cookies remain httpOnly
     throughout — this token carries no authentication value on its own, it
-    only proves the request came from the same origin that received the
-    cookie.
+    only proves the request came from a page that could read this specific
+    response.
 
     Every safe-method (GET/HEAD/OPTIONS) response issues a token if the
     request didn't already carry one, so the very first page load —
@@ -68,9 +79,14 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         if cookie_token is None:
+            new_token = secrets.token_urlsafe(32)
+            # Also exposed as a response header (see the class docstring) —
+            # the only way a cross-origin frontend can ever learn this
+            # value, since it can't read the cookie itself.
+            response.headers[CSRF_HEADER_NAME] = new_token
             response.set_cookie(
                 key=CSRF_COOKIE_NAME,
-                value=secrets.token_urlsafe(32),
+                value=new_token,
                 httponly=False,
                 secure=self._secure,
                 samesite=self._samesite,
