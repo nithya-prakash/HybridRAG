@@ -44,18 +44,23 @@ async def test_csrf_token_header_is_exposed_via_cors():
         assert "x-csrf-token" in exposed.lower()
 
 
-async def test_csrf_token_header_not_resent_once_cookie_already_set():
-    # Only the request that *issues* the cookie needs to echo it as a
-    # header too — once the browser already holds the cookie (and, for a
-    # cross-origin frontend, its in-memory copy), re-sending the header on
-    # every single response would work but is pointless traffic.
+async def test_csrf_token_header_is_resent_on_every_safe_request():
+    # Deliberately the opposite of "only echo it once": document.cookie
+    # persists across page loads for a same-origin frontend, but a
+    # cross-origin frontend's in-memory copy of this value has nowhere else
+    # to live and is wiped on every navigation. If the header were only
+    # sent once (the request that issues the cookie), every page load after
+    # the very first one, session-wide, would leave a cross-origin frontend
+    # holding a browser cookie it has no way to learn the value of anymore.
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         first = await ac.get("/health")
-        assert first.headers.get("x-csrf-token")
+        first_token = first.headers.get("x-csrf-token")
+        assert first_token
 
         second = await ac.get("/health")
-        assert second.headers.get("x-csrf-token") is None
+        second_token = second.headers.get("x-csrf-token")
+        assert second_token == first_token  # same cookie value, echoed again
 
 
 async def test_unsafe_method_without_csrf_header_is_rejected():

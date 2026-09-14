@@ -32,24 +32,30 @@ class CsrfMiddleware(BaseHTTPMiddleware):
     regardless of its SameSite/Secure attributes — that's not a CSRF
     property, it's a basic same-origin-policy fact about `document.cookie`
     itself. So the value is *also* echoed back as an `X-CSRF-Token`
-    *response* header the first time it's issued (see below), which CORS
+    *response* header on every safe-method response (see below), which CORS
     can expose cross-origin (`Access-Control-Expose-Headers` —
     app/main.py) even though the cookie itself stays unreadable there. A
     same-origin frontend can use either source; a cross-origin one only has
-    the header. Either way, what actually defeats a cross-site attacker is
-    unchanged: only a legitimate request — one the real frontend, same- or
-    cross-origin, made and read the response of — can end up knowing a
-    value that matches the cookie. The JWT auth cookies remain httpOnly
-    throughout — this token carries no authentication value on its own, it
-    only proves the request came from a page that could read this specific
-    response.
+    the header — and needs it on *every* safe-method response, not only the
+    one that first sets the cookie: `document.cookie` persists across page
+    loads, but a cross-origin frontend's in-memory copy of this value has
+    nowhere else to live and is wiped on every navigation, so each fresh
+    page load needs its own chance to re-learn a value the browser's cookie
+    jar has actually held onto the whole time. Either way, what actually
+    defeats a cross-site attacker is unchanged: only a legitimate request —
+    one the real frontend, same- or cross-origin, made and read the
+    response of — can end up knowing a value that matches the cookie. The
+    JWT auth cookies remain httpOnly throughout — this token carries no
+    authentication value on its own, it only proves the request came from a
+    page that could read this specific response.
 
-    Every safe-method (GET/HEAD/OPTIONS) response issues a token if the
-    request didn't already carry one, so the very first page load —
-    happening before any login — establishes it. Unsafe methods (POST/PUT/
-    PATCH/DELETE) require the header to be present and to match the cookie;
-    a missing or mismatched pair is rejected before the request reaches any
-    route handler.
+    Every safe-method (GET/HEAD/OPTIONS) response both issues the cookie
+    (if the request didn't already carry one — so the very first page load,
+    before any login, establishes it) and echoes its value as the
+    `X-CSRF-Token` header, new or pre-existing either way. Unsafe methods
+    (POST/PUT/PATCH/DELETE) require the header to be present and to match
+    the cookie; a missing or mismatched pair is rejected before the request
+    reaches any route handler.
     """
 
     def __init__(self, app) -> None:  # noqa: ANN001 - Starlette's own (untyped) app param
@@ -79,19 +85,28 @@ class CsrfMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         if cookie_token is None:
-            new_token = secrets.token_urlsafe(32)
-            # Also exposed as a response header (see the class docstring) —
-            # the only way a cross-origin frontend can ever learn this
-            # value, since it can't read the cookie itself.
-            response.headers[CSRF_HEADER_NAME] = new_token
+            cookie_token = secrets.token_urlsafe(32)
             response.set_cookie(
                 key=CSRF_COOKIE_NAME,
-                value=new_token,
+                value=cookie_token,
                 httponly=False,
                 secure=self._secure,
                 samesite=self._samesite,
                 domain=self._domain,
                 path="/",
             )
+
+        # Echoed as a response header on *every* safe-method response, not
+        # only the one that first issues the cookie (see the class
+        # docstring) — a same-origin frontend only ever needs this once,
+        # since document.cookie persists across page loads, but a
+        # cross-origin one's in-memory copy (there's nowhere else it could
+        # live — it can't read this cookie) is wiped on every navigation.
+        # Without re-sending it every time, only the very first request a
+        # cross-origin frontend ever makes, session-wide, would work — every
+        # page load after that would carry a browser cookie the frontend
+        # itself has no way to learn the value of anymore.
+        if request.method in _SAFE_METHODS:
+            response.headers[CSRF_HEADER_NAME] = cookie_token
 
         return response

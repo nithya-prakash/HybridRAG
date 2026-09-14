@@ -29,14 +29,17 @@ export async function parseErrorDetail(res: Response): Promise<string> {
  * a *different* origin no matter its SameSite/Secure attributes. The
  * backend's CsrfMiddleware (backend/app/core/csrf.py) still sets the
  * `csrf_token` cookie the browser sends back automatically on every
- * request, but it also now echoes that same value as an `X-CSRF-Token`
- * *response header* on the request that first issues it, exposed
- * cross-origin via `Access-Control-Expose-Headers` — a page can read an
- * exposed header from its own fetch() response even when it could never
- * read that origin's cookies directly. `captureCsrfToken` below is called
- * after every request; `csrfHeaders` echoes whatever it last captured back
- * as the header the backend's double-submit check requires on every
- * unsafe-method (POST/PUT/PATCH/DELETE) request.
+ * request, but it also echoes that same value as an `X-CSRF-Token`
+ * *response header* on every safe-method (GET/HEAD/OPTIONS) response —
+ * not only the one that first sets the cookie, since this in-memory copy
+ * (unlike `document.cookie`) is wiped on every page navigation and needs a
+ * chance to be re-learned on each fresh load. Exposed cross-origin via
+ * `Access-Control-Expose-Headers` — a page can read an exposed header from
+ * its own fetch() response even when it could never read that origin's
+ * cookies directly. `captureCsrfToken` below is called after every
+ * request; `csrfHeaders` echoes whatever it last captured back as the
+ * header the backend's double-submit check requires on every unsafe-method
+ * (POST/PUT/PATCH/DELETE) request.
  */
 let csrfToken: string | null = null;
 
