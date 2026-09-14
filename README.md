@@ -1,5 +1,8 @@
 # RAG Knowledge Assistant
 
+**[Live demo →](https://hybridrag-nithya-prakash.vercel.app)** (backend is on Render's free
+tier — the first request after a period of inactivity may take 30-50s to wake up)
+
 A production-grade, multi-user RAG (Retrieval-Augmented Generation) knowledge assistant: upload
 documents, ask questions about them in a chat interface, and get answers grounded in your own
 content with inline citations back to the exact source passage — not a generic LLM chat wrapper.
@@ -231,11 +234,12 @@ CI builds and pushes tagged backend/frontend images to GHCR on every merge to `m
 lint, the full test suite, and dependency audits pass. Rolling a new image onto a running VM
 is a documented manual step (no real target host in this repo to test auto-deploy against).
 
-**Free-tier live demo:** a separate deployment path (Render + Qdrant Cloud + Upstash + Vercel,
-Groq instead of self-hosted Ollama) exists specifically for a zero-cost, publicly reachable
-instance — see [`docs/DEPLOY_FREE_TIER.md`](docs/DEPLOY_FREE_TIER.md) and `render.yaml`. It
-trades some of the hardening above for $0/month; the single-VM path is still the one to use
-for an actual production deployment.
+**Free-tier live demo:** [hybridrag-nithya-prakash.vercel.app](https://hybridrag-nithya-prakash.vercel.app)
+— a separate deployment path (Render + Qdrant Cloud + Upstash + Vercel, Groq instead of
+self-hosted Ollama) exists specifically for a zero-cost, publicly reachable instance — see
+[`docs/DEPLOY_FREE_TIER.md`](docs/DEPLOY_FREE_TIER.md) and `render.yaml`. It trades some of
+the hardening above for $0/month; the single-VM path is still the one to use for an actual
+production deployment.
 
 ## Project structure
 
