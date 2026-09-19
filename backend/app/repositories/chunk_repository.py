@@ -118,7 +118,20 @@ class ChunkRepository:
             if created_before is not None:
                 conditions.append(Document.created_at <= created_before)
 
-        stmt = stmt.where(*conditions).order_by(rank.desc()).limit(top_k)
+        # `ChunkModel.id` as a secondary sort key: without one, two chunks
+        # with the exact same `ts_rank_cd` (plausible for short or similarly-
+        # worded content) have no guaranteed order between them — SQL leaves
+        # ties among equal ORDER BY keys unspecified, so the same query could
+        # return them in a different order on a different run. Caught for
+        # real (not theoretical) while verifying eval/reranker_training/
+        # generate_training_data.py's hard-negative mining was reproducible
+        # run to run: an isolated, sequential double-run occasionally
+        # differed by exactly one query's negative set at this exact
+        # tie-break point (see eval/RESULTS.md). A stable, deterministic
+        # order is a real correctness property for a search endpoint on its
+        # own (repeated identical searches should return identical results),
+        # not just a fix for this one offline script.
+        stmt = stmt.where(*conditions).order_by(rank.desc(), ChunkModel.id).limit(top_k)
         result = await self._session.execute(stmt)
         return [(chunk, rank_value) for chunk, rank_value in result.all()]
 

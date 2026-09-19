@@ -42,6 +42,17 @@ dev = [
     "pip-audit>=2.7.0",
     "pytest-cov>=6.0.0",
 ]
+# Only needed to RUN eval/reranker_training/train_reranker.py — the
+# CrossEncoderTrainer API these back (sentence-transformers, already a real
+# dependency above, is what actually does the fine-tuning). Not installed in
+# the production image (infra/docker/backend.Dockerfile's `uv sync --no-dev`
+# doesn't pull dependency-groups either) since nothing at request-serving
+# time needs them — same "don't bloat the shipped image" reasoning as the
+# CPU-only torch wheel override below.
+training = [
+    "datasets>=3.0.0",
+    "accelerate>=1.0.0",
+]
 
 [tool.uv]
 # This project only ever runs inside Linux containers — Docker locally, CI

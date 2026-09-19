@@ -139,3 +139,27 @@ async def test_search_by_keyword_respects_top_k(db_session: AsyncSession):
     )
 
     assert len(results) == 2
+
+
+async def test_search_by_keyword_orders_exact_rank_ties_deterministically(
+    db_session: AsyncSession,
+):
+    # Chunks with word-for-word identical content get the exact same
+    # ts_rank_cd score — without a secondary ORDER BY key, SQL leaves their
+    # relative order among a tie unspecified, which a repeated identical
+    # search could then answer differently between calls. Caught for real
+    # (not theoretical) while verifying eval/reranker_training/
+    # generate_training_data.py's hard-negative mining reproduced identically
+    # across runs — see eval/RESULTS.md.
+    tied_content = "identical tiebreak content appears here"
+    user, _document = await _make_document_with_chunks(
+        db_session, "fts-tiebreak@example.com", [tied_content] * 5
+    )
+
+    first_call = await ChunkRepository(db_session).search_by_keyword(user.id, "tiebreak")
+    second_call = await ChunkRepository(db_session).search_by_keyword(user.id, "tiebreak")
+
+    first_ids = [chunk.id for chunk, _rank in first_call]
+    second_ids = [chunk.id for chunk, _rank in second_call]
+    assert first_ids == second_ids
+    assert first_ids == sorted(first_ids)  # the tiebreak key itself: ChunkModel.id

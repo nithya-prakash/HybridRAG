@@ -35,6 +35,23 @@ eval/
 ├── generate_final_report.py       renders final_report.json into results/FINAL_REPORT.md
 ├── results/                       every run's JSON output (timestamped + a `*_latest.json`
 │                                  per phase)
+├── reranker_training/              fine-tunes the cross-encoder reranker on this corpus —
+│                                  see README.md's reranker fine-tuning section and this
+│                                  directory's own scripts' docstrings for the full story
+│   ├── generate_training_data.py  deterministic query/positive/hard-negative dataset
+│                                  generation, document-level train/calibration split
+│   ├── train_reranker.py          fine-tunes cross-encoder/ms-marco-MiniLM-L-6-v2 via
+│                                  sentence-transformers' CrossEncoderTrainer
+│   ├── evaluate_baseline_vs_finetuned.py   baseline vs. fine-tuned on the full, untouched
+│                                  116-query benchmark
+│   ├── calibrate_threshold.py     checks whether rag_min_rerank_score needs recalibrating
+│                                  for the fine-tuned model, using the calibration split only
+│   ├── data/                      generated train/calibration examples (gitignored —
+│                                  regenerable) + dataset_stats.json (committed)
+│   ├── models/                    the fine-tuned checkpoint (gitignored — binary weights)
+│                                  + training_metadata.json (committed)
+│   └── tests/                     unit tests for the deterministic parts of dataset
+│                                  generation
 └── tests/                         unit tests for the metrics math itself
 ```
 
@@ -69,6 +86,19 @@ uv run python ../eval/run_eval.py --query-ids q01,q22,q35   # generation on a sp
 uv run python ../eval/evaluate_hallucination.py             # hallucination guard confusion matrix
 uv run python ../eval/benchmark_latency.py                  # latency percentiles
 uv run pytest --cov --cov-report=term-missing               # test suite + coverage
+```
+
+## Reranker fine-tuning
+
+Fine-tunes the cross-encoder reranker on this project's own corpus, then evaluates it
+against the frozen baseline on the full 116-query held-out benchmark. See README.md's
+"Reranker fine-tuning" section for the real results and full write-up.
+
+```bash
+uv run python ../eval/reranker_training/generate_training_data.py
+uv run python ../eval/reranker_training/train_reranker.py
+uv run python ../eval/reranker_training/evaluate_baseline_vs_finetuned.py
+uv run python ../eval/reranker_training/calibrate_threshold.py
 ```
 
 ## Modes: what's real and what isn't

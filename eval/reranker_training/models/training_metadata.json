@@ -1,0 +1,165 @@
+{
+  "generated_at": "2026-09-19T16:20:39.035800+00:00",
+  "git_commit": null,
+  "base_model": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+  "training_seed": 42,
+  "device": "cpu",
+  "hyperparameters": {
+    "num_train_epochs": 4,
+    "per_device_train_batch_size": 16,
+    "learning_rate": 2e-05,
+    "warmup_ratio": 0.1,
+    "loss": "BinaryCrossEntropyLoss"
+  },
+  "dataset_stats": {
+    "document_split_seed": 42,
+    "calibration_fraction_target": 0.25,
+    "train_documents": [
+      "compensation_and_benefits",
+      "customer_success_playbook",
+      "employee_handbook",
+      "incident_response_runbook",
+      "product_faq",
+      "security_policy"
+    ],
+    "calibration_documents": [
+      "engineering_practices",
+      "enterprise_console_faq"
+    ],
+    "n_chunks_total": 50,
+    "n_chunks_train": 39,
+    "n_chunks_calibration": 11,
+    "retrieval_top_k_for_mining": 30,
+    "max_hard_negatives_per_query": 4,
+    "template_usage_counts": {
+      "0": 9,
+      "1": 13,
+      "2": 4,
+      "3": 10,
+      "4": 8,
+      "5": 6
+    },
+    "n_examples_train": 195,
+    "n_examples_train_positive": 39,
+    "n_examples_train_hard_negative": 156,
+    "n_examples_calibration": 55,
+    "n_examples_calibration_positive": 11,
+    "n_examples_calibration_hard_negative": 44,
+    "n_pseudo_query_collisions_with_real_benchmark": 0
+  },
+  "final_train_loss": 0.2435299318570357,
+  "log_history": [
+    {
+      "loss": 0.7572638511657714,
+      "grad_norm": 2.4712517261505127,
+      "learning_rate": 1.3333333333333333e-05,
+      "epoch": 0.38461538461538464,
+      "step": 5
+    },
+    {
+      "loss": 0.3656226396560669,
+      "grad_norm": 8.15770435333252,
+      "learning_rate": 1.8695652173913045e-05,
+      "epoch": 0.7692307692307693,
+      "step": 10
+    },
+    {
+      "eval_loss": 0.0670647919178009,
+      "eval_runtime": 1.7342,
+      "eval_samples_per_second": 31.715,
+      "eval_steps_per_second": 2.307,
+      "epoch": 1.0,
+      "step": 13
+    },
+    {
+      "loss": 0.1886553168296814,
+      "grad_norm": 4.989893436431885,
+      "learning_rate": 1.6521739130434785e-05,
+      "epoch": 1.1538461538461537,
+      "step": 15
+    },
+    {
+      "loss": 0.17948505878448487,
+      "grad_norm": 2.943490505218506,
+      "learning_rate": 1.4347826086956522e-05,
+      "epoch": 1.5384615384615383,
+      "step": 20
+    },
+    {
+      "loss": 0.19133970737457276,
+      "grad_norm": 2.955026388168335,
+      "learning_rate": 1.2173913043478263e-05,
+      "epoch": 1.9230769230769231,
+      "step": 25
+    },
+    {
+      "eval_loss": 0.05811622738838196,
+      "eval_runtime": 1.7523,
+      "eval_samples_per_second": 31.388,
+      "eval_steps_per_second": 2.283,
+      "epoch": 2.0,
+      "step": 26
+    },
+    {
+      "loss": 0.3128608226776123,
+      "grad_norm": 4.336483955383301,
+      "learning_rate": 1e-05,
+      "epoch": 2.3076923076923075,
+      "step": 30
+    },
+    {
+      "loss": 0.16717863082885742,
+      "grad_norm": 2.5765955448150635,
+      "learning_rate": 7.82608695652174e-06,
+      "epoch": 2.6923076923076925,
+      "step": 35
+    },
+    {
+      "eval_loss": 0.05982176586985588,
+      "eval_runtime": 1.842,
+      "eval_samples_per_second": 29.859,
+      "eval_steps_per_second": 2.172,
+      "epoch": 3.0,
+      "step": 39
+    },
+    {
+      "loss": 0.04631845355033874,
+      "grad_norm": 2.6303677558898926,
+      "learning_rate": 5.652173913043479e-06,
+      "epoch": 3.076923076923077,
+      "step": 40
+    },
+    {
+      "loss": 0.14960381984710694,
+      "grad_norm": 4.937597751617432,
+      "learning_rate": 3.4782608695652175e-06,
+      "epoch": 3.4615384615384617,
+      "step": 45
+    },
+    {
+      "loss": 0.14583797454833985,
+      "grad_norm": 1.0327543020248413,
+      "learning_rate": 1.3043478260869566e-06,
+      "epoch": 3.8461538461538463,
+      "step": 50
+    },
+    {
+      "eval_loss": 0.06222328171133995,
+      "eval_runtime": 1.8048,
+      "eval_samples_per_second": 30.474,
+      "eval_steps_per_second": 2.216,
+      "epoch": 4.0,
+      "step": 52
+    },
+    {
+      "train_runtime": 116.8235,
+      "train_samples_per_second": 6.677,
+      "train_steps_per_second": 0.445,
+      "total_flos": 0.0,
+      "train_loss": 0.2435299318570357,
+      "epoch": 4.0,
+      "step": 52
+    }
+  ],
+  "checkpoint_path": "/app/eval/reranker_training/models/finetuned"
+}

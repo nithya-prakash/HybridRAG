@@ -141,7 +141,25 @@ class Settings(BaseSettings):
     chunk_overlap_tokens: int = 75
 
     # Reranker
+    # A plain HF model id/local path is always accepted directly (the
+    # historical, still-default behavior). RERANKER_MODEL also accepts the
+    # literals "baseline"/"finetuned" as a convenience alias — resolved in
+    # app/core/reranker.py (not here: Settings stays a plain data holder,
+    # and resolving a literal that depends on reranker_finetuned_path below
+    # is simpler as an ordinary function than as a pydantic cross-field
+    # validator, which would have to fight field declaration order to see
+    # that value).
     reranker_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    # Where CrossEncoderReranker looks when RERANKER_MODEL=finetuned. Not
+    # baked into the production Docker image (see infra/docker/
+    # backend.Dockerfile — only the baseline model is warmed up at build
+    # time, and HF_HUB_OFFLINE=1 at runtime means a missing local path here
+    # fails loudly rather than silently falling back to a network fetch).
+    # Real, disclosed limitation: RERANKER_MODEL=finetuned is for local/eval
+    # use with a checkpoint produced by eval/reranker_training/
+    # train_reranker.py, not (yet) a supported production deployment target
+    # — see README.md's reranker fine-tuning section.
+    reranker_finetuned_path: str = "../eval/reranker_training/models/finetuned"
 
     # Search
     hybrid_search_rrf_k: int = 60

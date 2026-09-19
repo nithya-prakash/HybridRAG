@@ -29,3 +29,19 @@ def validate_production_settings(settings: Settings | None = None) -> None:
             "allow_credentials=True would let any site read authenticated "
             "responses. Set explicit allowed origins instead."
         )
+
+    if settings.reranker_model == "finetuned":
+        # eval/reranker_training/ fine-tuned the reranker as a real, honestly
+        # negative experiment: retrieval metrics were unchanged and the
+        # hallucination guard's F1 *decreased* versus the baseline on the
+        # full 116-query held-out benchmark (see eval/RESULTS.md) — it was
+        # deliberately never promoted. RERANKER_MODEL=baseline is the only
+        # validated choice outside local/test; blocking the alias here
+        # (rather than only documenting "don't do this") is what makes an
+        # accidental `RERANKER_MODEL=finetuned` in a deploy config fail loud
+        # at boot instead of silently serving a worse-evaluated model.
+        raise InsecureConfigurationError(
+            "RERANKER_MODEL=finetuned is not a validated production configuration — "
+            "see eval/RESULTS.md's reranker fine-tuning section for the real, negative "
+            "A/B result. Use RERANKER_MODEL=baseline (or leave it unset)."
+        )

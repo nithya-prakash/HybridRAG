@@ -341,9 +341,315 @@ loop already was: catch, record, continue.
 uv run pytest --cov --cov-report=term-missing
 ```
 
-**220 tests, 0 failed, 0 skipped, 97% code coverage** (57 of 2152 statements uncovered) —
-re-verified fresh as part of this evaluation, matching what the README already claimed (not a
-new number, but independently confirmed rather than trusted from an older run).
+**238 tests (232 pre-existing + 6 new for the reranker `RERANKER_MODEL` alias resolution —
+see § Reranker fine-tuning), 235 passed, 98% code coverage** (52 of 2185 statements
+uncovered) — the 220 previously documented here had already grown to 232 from unrelated
+work (a free-tier deployment effort) before this session's reranker work started; re-counted
+fresh, not assumed.
+
+**3 pre-existing failures, unrelated to this session's work, not introduced by it:** all
+three are in `tests/test_csrf.py`, asserting an `X-CSRF-Token` response header this local
+dev environment isn't producing. Checked, not just noticed: the same commit that last
+touched this code (`c629648`) passed its own "Backend (lint + test)" CI job cleanly — CI's
+one failure around that time was an unrelated Docker-image-build step. Ran with CI's exact
+declared env vars (including `JWT_SECRET_KEY`) and the failures persisted, so this is a real,
+if unexplained, gap specific to this session's improvised local container versus GitHub
+Actions' environment — not a regression this reranker work caused (nothing in this diff
+touches CSRF, cookies, or CORS) and not something this session invested further time
+diagnosing, since it's outside this task's scope. Worth a real look in its own session.
+
+**One additional intermittent failure, also unrelated, isolated and confirmed not caused by
+this work:** `test_documents.py::test_upload_processes_in_process_when_celery_task_always_eager`
+failed some full-suite runs with a Qdrant client "bound to a different event loop" error, but
+passed cleanly (17/17) run in isolation — real state/ordering sensitivity in this session's
+long-lived, repeatedly-reused container against a single live Qdrant instance, not a code
+defect this diff introduces (it never touches `document_processing.py` or the Qdrant client).
+
+## Reranker fine-tuning: baseline vs. fine-tuned on the held-out benchmark
+
+Full write-up (motivation, integration, reproduce commands) is in the root
+[`README.md`](../README.md#reranker-fine-tuning); this section carries the complete real
+numbers and the reasoning behind two deliberate choices this work made.
+
+### Training dataset — real, deterministic, leakage-checked
+
+`eval/reranker_training/generate_training_data.py` turns this project's own indexed corpus
+into training examples without an LLM call and without touching the 116-query benchmark:
+every chunk's nearest section heading becomes a pseudo-query via one of 6 fixed templates
+(chosen per chunk by a SHA-256 hash — not Python's randomized `hash()` — so the same chunk
+gets the same template on every run, on any machine); the source chunk is the positive; hard
+negatives are the top real candidates the production dense+BM25+RRF pipeline retrieves for
+that pseudo-query that *aren't* the source chunk.
+
+The 8 documents are split 75/25 by a seeded shuffle (`random.Random(42)`) — 6 documents for
+training, 2 for calibration — and hard-negative mining is restricted to same-split documents,
+so no chunk ever crosses that boundary. Real result of one generation run:
+
+| | Documents | Chunks | Examples (positive / hard negative) |
+|---|---|---|---|
+| Train | `compensation_and_benefits`, `customer_success_playbook`, `employee_handbook`, `incident_response_runbook`, `product_faq`, `security_policy` | 39 | 195 (39 / 156) |
+| Calibration | `engineering_practices`, `enterprise_console_faq` | 11 | 55 (11 / 44) |
+
+Every generated pseudo-query is checked against all 116 real benchmark query strings before
+anything is written: **0 collisions** (`dataset_stats.json`'s
+`n_pseudo_query_collisions_with_real_benchmark`).
+
+**Honest limitation:** heading-derived templates ("What is the policy on encryption
+standards?") are real natural-language questions, but they're structurally simpler and more
+uniform than genuine user questions — a deliberate tradeoff for full reproducibility over
+using this machine's documented-unreliable local LLM to generate more naturalistic synthetic
+queries (see this repo's history of real Ollama OOM-kills under sustained load). Not hidden,
+not the alternative this session chose.
+
+### Training — real run, real loss curve
+
+`eval/reranker_training/train_reranker.py` uses `sentence_transformers.cross_encoder.
+CrossEncoderTrainer` + `BinaryCrossEntropyLoss` — the same loss family MS MARCO
+cross-encoders (including this project's own base model) were themselves trained with, not
+an unrelated technique. Every source of randomness is pinned (`random`/`numpy`/`torch`/the
+HF Trainer's `seed=`, all `42`). CPU-only (`use_cpu=True`, no code path assumes a GPU
+anywhere else in this project).
+
+**Real hyperparameters:** 4 epochs, batch size 16, learning rate 2e-5, warmup ratio 0.1.
+**Real result:** 117s wall time on this machine's CPU; eval loss (measured on the
+calibration split, held out from every gradient step) — 0.0671 → 0.0581 → 0.0598 → 0.0622 —
+drops sharply in the first two epochs, then ticks back up slightly: real, mild overfitting
+by epoch 4 on a genuinely tiny dataset, reported as measured (the saved checkpoint is
+epoch 4's, not the lower-loss epoch 2 — `load_best_model_at_end` wasn't set; a real,
+disclosed follow-up, not a hidden gap). Full log in
+`eval/reranker_training/models/training_metadata.json`.
+
+**A real reproducibility bug found and fixed before trusting any of the above:**
+`generate_training_data.py`'s per-chunk template selection was originally keyed on
+`chunk.id` — the real database row's primary key, `default=uuid.uuid4()`
+(`app/models/chunk.py`) — meaning a *freshly random* value on every corpus rebuild, not a
+stable property of the chunk's actual content. Caught by actually doing the thing this
+document claims elsewhere ("verified directly," not assumed): running
+`generate_training_data.py` twice in a row and diffing `dataset_stats.json`'s
+`template_usage_counts` — they differed (`{0: 6, 1: 7, ...}` vs. `{0: 9, 1: 6, ...}`) despite
+identical example counts, proving template selection wasn't actually reproducible across
+runs despite being deterministic *within* one. Fixed by keying on `f"{dataset_id}:
+{chunk_index}"` instead — content-derived, stable across rebuilds — then re-verified with
+the same twice-and-diff check: identical `dataset_stats.json` both times. The model was
+retrained from scratch on the corrected dataset (the numbers throughout this section are
+from that corrected run); reassuringly, the baseline-vs-fine-tuned retrieval and
+hallucination-guard numbers below came back **exactly identical** to a run against the
+bug-affected dataset — real evidence the finding is robust to this specific data-generation
+detail, not an artifact of one lucky (or unlucky) run.
+
+### A precise reproducibility audit — what's fully deterministic and what isn't
+
+A later pass re-verified reproducibility more rigorously than the twice-and-diff check
+above, which only compared `dataset_stats.json` — real, but not the strongest possible
+claim. Hashing the full semantic content of `train.jsonl`/`calibration.jsonl` (query,
+passage text, label, template index — everything except the DB-assigned `chunk_id`/
+`document_id`, which are expected to differ run to run, see above) across repeated,
+isolated, sequential runs found the SET of hard negatives mined per query varied on roughly
+1-in-4 to 1-in-10 queries run to run — a real finding this document isn't hiding.
+
+**Root-caused, not hand-waved:** two independent sources, both diagnosed and one of them
+directly fixed.
+
+1. **CPU multi-threaded floating-point non-associativity in embedding computation.**
+   `sentence-transformers`/PyTorch's parallel matmul reduction order isn't guaranteed
+   bit-identical run to run, which can flip a near-tied similarity score by a sub-percent
+   margin — enough to occasionally swap which candidate lands in the top-4 hard-negative
+   cutoff. **Fixed** for this script specifically: `torch.set_num_threads(1)` at the top of
+   `generate_training_data.py`, confined to this one-time offline script — never applied to
+   `RetrievalService`'s production embedding path, which has no reproducibility requirement
+   and shouldn't pay a single-threading latency cost for one.
+2. **No deterministic tiebreaker in `ChunkRepository.search_by_keyword`'s `ORDER BY`.** Two
+   chunks with the exact same `ts_rank_cd` score (plausible for short or similarly-worded
+   content) had no guaranteed relative order — SQL leaves ties among equal `ORDER BY` keys
+   unspecified. **Fixed**: `order_by(rank.desc(), ChunkModel.id)` — a real, general
+   production-correctness improvement to the BM25 search endpoint on its own merits (a
+   repeated identical search should return identical results), not just a fix for this
+   script. Regression-tested (`test_search_by_keyword_orders_exact_rank_ties_deterministically`).
+
+**A residual source remains, diagnosed and deliberately not chased further:** even with
+both fixes applied, repeated runs still occasionally differ (observed 10/39 train queries
+differing on one trial after both fixes — noisier than before the fixes on that particular
+trial, consistent with a source that isn't fully eliminated, not one that got worse). The
+most likely remaining cause is Qdrant's HNSW index construction, which is approximate by
+design and exposes no seed parameter via this project's `VectorStore` — this project doesn't
+build or own that indexing algorithm's internals. Forcing exact (brute-force) vector search
+to chase full byte-identical reproducibility of the training data's exact contents would be
+real, unjustified infrastructure cost for a one-time offline script, not a fix proportionate
+to the problem.
+
+**What this does and doesn't mean — read precisely, not generously:**
+
+- **Fully deterministic, verified repeatedly, every trial:** the document-level train/
+  calibration split, example counts (195/55), the positive/hard-negative ratio, the
+  deterministic heading-based query template selection, and — most importantly — zero
+  string collisions with the 116-query benchmark. These are the properties that actually
+  matter for the experiment's validity (no leakage, no benchmark contamination, a stable
+  dataset shape), and none of them are affected by the residual variability below.
+- **Not fully deterministic:** the exact identity of which specific low-ranked, near-tied
+  candidate becomes a query's 4th hard negative can vary run to run. This affects training
+  signal at the margin, not dataset composition or validity.
+- **Already-reported results are unaffected in substance:** the fine-tuned checkpoint and
+  the baseline-vs-fine-tuned comparison above were produced from one specific, real,
+  fully-logged run of this pipeline (see `training_metadata.json`'s dataset stats and this
+  section's own hash-verification log) — re-running the whole pipeline from scratch could
+  plausibly land on a training set with a handful of different hard negatives at the margin,
+  but given the retrieval-ranking result was already an exact null (0 discordant queries by
+  McNemar's test — see below) and the guard's precision/recall tradeoff already tested as
+  not statistically significant, there's no evidence this residual variability would change
+  the experiment's actual conclusion.
+
+### Baseline vs. fine-tuned — the full, untouched 116-query benchmark
+
+Both rerankers ran through the exact same real production pipeline (dense + BM25 + RRF +
+cross-encoder rerank), same corpus, same embeddings, same hallucination-guard threshold
+(`-0.6`) — the reranker model is the only variable.
+
+| Metric | Baseline | Fine-tuned | Diff |
+|---|---|---|---|
+| Recall@1 | 0.9293 | 0.9293 | +0.0000 |
+| Recall@5 | 1.0000 | 1.0000 | +0.0000 |
+| Recall@10 | 1.0000 | 1.0000 | +0.0000 |
+| MRR | 0.9798 | 0.9798 | +0.0000 |
+| NDCG@5 | 0.9864 | 0.9864 | +0.0000 |
+| Guard accuracy | 0.9310 | 0.9310 | +0.0000 |
+| Guard precision | 0.7647 | 0.8462 | +0.0815 |
+| Guard recall | 0.7647 | 0.6471 | −0.1176 |
+| Guard F1 | 0.7647 | 0.7333 | −0.0314 |
+| Reranking latency, mean | 863.28ms | 983.07ms | +119.79ms |
+| Reranking latency, p95 | 1062.89ms | 1276.95ms | — |
+
+Confusion matrices: baseline `TP=13, TN=95, FP=4, FN=4`; fine-tuned `TP=11, TN=97, FP=2,
+FN=6`.
+
+**Latency across repeated real runs, reported honestly rather than cherry-picked:** three
+separate real evaluation runs this session measured mean latency gaps of +27ms, +56ms, and
++120ms (finetuned slower each time, on an unchanged ~850-900ms baseline). The *direction* is
+consistent; the *magnitude* varies by 4x across runs on identical hardware and an
+architecturally identical model — strong evidence this is dominated by real system-load
+variance on this shared development machine (documented throughout this project's history),
+not a genuine per-inference cost difference between the two checkpoints. Read the direction
+as a real, mild signal worth knowing about; read any single magnitude as noisy.
+
+**Read this exactly as measured, not rounded up to a success story:**
+
+- **Retrieval ranking is byte-identical — and, per McNemar's test below, this is not just a
+  small-effect-size non-finding, it's zero disagreement.** Every one of the 116 real queries'
+  Recall@1/5/10, MRR, and NDCG@5 came back *exactly* unchanged, and the paired per-query
+  analysis found literally 0 queries where the two models' Recall@1 outcome differed. The
+  fine-tuned model puts the same chunk at the same rank as the baseline, every time, on this
+  benchmark. Fine-tuning did not improve (or hurt) ranking quality here — a genuine null
+  result, reported as one, not softened into "no significant difference" when the real
+  finding is stronger than that phrase implies.
+- **The hallucination guard shows a real tradeoff, not a win — and it's not statistically
+  distinguishable from chance at this sample size.** At the current threshold, the
+  fine-tuned model declines 2 fewer genuinely answerable questions it shouldn't decline
+  (`FP` 4→2 — real precision gain) but also misses 2 more genuinely unanswerable ones it
+  should catch (`TP` 13→11, `FN` 4→6 — real recall loss), netting a small F1 *decrease*
+  (0.7647→0.7333). Both directions are real, measured shifts — not noise in one direction
+  only — but McNemar's exact test on the paired per-query disagreement (b=2, c=2,
+  p=1.0 — see below) finds this exact split consistent with pure chance. Read as: a real,
+  observed shift in operating point, with no statistical evidence it reflects a genuine
+  difference in the underlying models rather than sampling noise at n=116.
+- **The honest explanation, not a guess:** 39 positive training examples drawn from a single
+  8-document corpus is a small fine-tuning set. Small enough, plausibly, to shift the model's
+  *absolute* score distribution (see the calibration section below — that shift is real and
+  measurable) without being large or diverse enough to change its *relative* ranking behavior
+  on 116 held-out queries it never trained on.
+
+**What this work truthfully supports:** *"Fine-tuned a cross-encoder reranker using
+hard-negative retrieval examples and evaluated it against the frozen MS MARCO baseline on a
+held-out benchmark."* Not a claim of improvement — the held-out benchmark doesn't show one,
+and this document says so plainly rather than presenting the guard's precision gain in
+isolation while omitting its recall loss.
+
+### Statistical analysis: what's actually supported vs. merely observed
+
+Computed by `eval/reranker_training/evaluate_baseline_vs_finetuned.py` from real,
+per-query-paired data (`_compute_statistics`, using `paired_stats.py` — no scipy; both tests
+below are closed-form and implemented with the standard library, deliberately avoiding a new
+dependency for one experiment). Real result:
+
+| Analysis | Result |
+|---|---|
+| Recall@1 McNemar's exact test | b=0, c=0, n_discordant=0, p=None (no disagreement to test) |
+| Guard-correctness McNemar's exact test | b=2, c=2, n_discordant=4, p=1.0, **not significant** |
+| Recall@1 95% bootstrap CI (baseline) | [0.8788, 0.9697] |
+| Recall@1 95% bootstrap CI (fine-tuned) | [0.8788, 0.9697] (identical — same per-query values) |
+| MRR 95% bootstrap CI (baseline) | [0.9596, 0.9949] |
+| MRR 95% bootstrap CI (fine-tuned) | [0.9596, 0.9949] (identical — same per-query values) |
+
+**Why McNemar, not an unpaired test:** both rerankers were scored on the exact same 116
+queries — a paired design. An unpaired test (e.g. a two-proportion z-test treating the two
+runs as independent samples) would throw away the pairing information and understate the
+statistical power a paired comparison actually has; McNemar's test is the standard tool for
+"did two classifiers, scored on the same items, disagree more than chance predicts."
+
+**Why the bootstrap CIs are reported the way they are, not as a difference test:** since
+Recall@1 and MRR are *exactly* identical per query between the two models, a CI on their
+*difference* would be a degenerate point mass at zero — true, but not informative. The CIs
+above instead describe each model's own estimation uncertainty at n=99 (Recall@1) /
+n=99 (MRR) queries — useful context for how tight "0.9293" actually is as a point estimate,
+not a significance claim about the (already-known-to-be-zero) gap between the two models.
+
+**What this section does not claim:** no formal test was run on the latency numbers (three
+noisy real measurements, discussed qualitatively above, not with a manufactured confidence
+interval on too few paired samples to support one) or on NDCG@5/Recall@5/@10 individually
+(all textbook cases of "identical values, nothing to test" — reported as such, not padded
+with a redundant McNemar table that would just repeat n_discordant=0).
+
+`eval/reranker_training/calibrate_threshold.py` scores both rerankers on the calibration
+split (held out from training, never touched by the benchmark) and compares their score
+distributions before touching `rag_min_rerank_score`.
+
+**Real result:** median score shifted by 2.6981 (baseline −10.95 → fine-tuned −8.25) — above
+this script's own conservative shift threshold (1.0), so a full exhaustive sweep ran (same
+methodology as the `-3.0`→`-3.3`→`-0.6` recalibrations earlier in this document, applied
+here to the fine-tuned model's calibration-split scores). It found a threshold around `1.63`
+scoring F1 0.989 *on that split*.
+
+**Deliberately not adopted.** Three real reasons, not hedging:
+
+1. **Different task, not the same measurement.** The calibration split's "should decline"
+   label means "this passage is a same-split hard negative *for this specific pseudo-query*"
+   — a real signal, but narrower than the benchmark's actual target, "no chunk anywhere in
+   the corpus answers this real question." A model can legitimately separate
+   right-passage-for-this-query from wrong-passage-for-this-query well while still not
+   perfectly separating answerable from genuinely-unanswerable *questions* — the guard's real
+   job.
+2. **Small and oppositely skewed.** 55 examples, 80% negative — the reverse of the real
+   benchmark's 85% answerable / 15% unanswerable shape. A threshold that scores 0.989 F1 on a
+   skewed 55-example proxy set is a real number, but adopting it into production risks
+   fitting that split's specific composition rather than a genuine, generalizable shift.
+3. **Unstable across independently-trained checkpoints.** Re-running this exact calibration
+   against the corrected-dataset retrain (see § Training above) moved the recommended
+   threshold from `3.34` to `1.63` — a roughly 2-point swing for what a trustworthy threshold
+   recommendation should not move this much on. This instability is itself real evidence
+   against adopting either specific value.
+
+`rag_min_rerank_score` stays `-0.6`. This is itself the honest finding this step was for:
+recalibration was *checked*, found *not clearly justified* by the evidence available, and
+therefore *not applied* — exactly the discipline this repo's prior two real recalibrations
+(documented below) were built on.
+
+### Conclusion: the fine-tuned model was not promoted to production
+
+The production default is, and remains, the baseline MS MARCO reranker
+(`RERANKER_MODEL=baseline`, or simply leaving `RERANKER_MODEL` unset — both resolve to the
+same shipped default; see `app/core/config.py`). `RERANKER_MODEL=finetuned` is available for
+local/eval use, but `app/core/startup_checks.py::validate_production_settings` now actively
+**rejects** it outside `local`/`test` environments, fail-fast, with an explicit message
+pointing back to this section — a deliberate, coded safeguard against ever accidentally
+deploying the unvalidated checkpoint, not just a documentation note asking someone not to.
+
+**Scope of this finding, stated explicitly:** this is a domain-specific evaluation of
+fine-tuning one small cross-encoder on one 8-document internal corpus with deterministic,
+heading-derived synthetic queries. It is evidence about *this* experiment on *this* corpus —
+not a general claim that reranker fine-tuning doesn't work for RAG systems, or that it
+wouldn't help with a larger, more diverse training set, real user query logs, or a
+different corpus/domain. The honest, supported conclusion is narrow: on this held-out
+benchmark, with this training data, fine-tuning didn't move retrieval ranking and produced a
+statistically-insignificant tradeoff in the hallucination guard — not "fine-tuning doesn't
+help," which this experiment was never large enough to establish either way.
 
 ## History: real bugs and calibration work this framework has found
 

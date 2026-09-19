@@ -29,8 +29,13 @@ frontend/*.tsbuildinfo
 # Docker
 *.pid
 
-# Data
-data/
+# Data — anchored to repo root (`/data/`), not `data/`: an unanchored
+# pattern matches a directory named `data` at ANY depth, which silently
+# swallowed eval/reranker_training/data/ too (git's negation rules can't
+# un-ignore a file whose parent directory is excluded — caught by
+# `git check-ignore -v` still reporting the file ignored after adding a `!`
+# rule for it, not assumed fixed).
+/data/
 
 # Unrelated project checkout that happens to live in this directory —
 # never part of this repo (it carries its own .git, which is exactly what
@@ -41,3 +46,19 @@ data/
 # produced them (real vs. synthetic) — eval/RESULTS.md documents the
 # current figures instead of committing raw report dumps.
 eval/results/*.json
+
+# Reranker training: the generated training/calibration examples are
+# regenerable from eval/reranker_training/generate_training_data.py (same
+# precedent as eval/results/*.json above) — dataset_stats.json, the small
+# provenance summary, IS committed (needs the explicit `!` below: the
+# unanchored "Data" rule above already matches ANY directory named `data`
+# at any depth, including this one, so without it dataset_stats.json would
+# be silently swallowed along with the regenerable .jsonl files it sits
+# next to — caught by checking `git status` after adding this directory,
+# not assumed). Model checkpoints are binary weights, never committed —
+# training_metadata.json (seed/hyperparameters/dataset stats/timestamp) is
+# the real, small, committed reproducibility artifact.
+eval/reranker_training/data/*.jsonl
+!eval/reranker_training/data/dataset_stats.json
+eval/reranker_training/models/finetuned/
+eval/reranker_training/models/_trainer_checkpoints/

@@ -5,7 +5,29 @@ from typing import Any
 
 from starlette.concurrency import run_in_threadpool
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
+
+# The historical default and only baseline this project has ever shipped —
+# named explicitly so `RERANKER_MODEL=baseline` has something real to
+# resolve back to, independent of Settings.reranker_model's own default
+# (which happens to equal this today, but the alias should mean "the
+# baseline" even if that field's default is ever repointed for some other
+# reason).
+BASELINE_RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+
+def resolve_reranker_model_name(settings: Settings) -> str:
+    """RERANKER_MODEL accepts a plain HF model id/local path directly (the
+    original, still-default behavior), or the literals "baseline"/
+    "finetuned" as a convenience alias — added alongside
+    eval/reranker_training/ so switching between the shipped MS MARCO
+    reranker and a fine-tuned checkpoint doesn't require typing out
+    `reranker_finetuned_path` by hand."""
+    if settings.reranker_model == "baseline":
+        return BASELINE_RERANKER_MODEL
+    if settings.reranker_model == "finetuned":
+        return settings.reranker_finetuned_path
+    return settings.reranker_model
 
 
 class Reranker(ABC):
@@ -39,9 +61,14 @@ class Reranker(ABC):
 
 
 class CrossEncoderReranker(Reranker):
-    def __init__(self) -> None:
-        settings = get_settings()
-        self._model_name = settings.reranker_model
+    def __init__(self, model_name: str | None = None) -> None:
+        # Explicit `model_name` bypasses config/alias resolution entirely —
+        # for eval/reranker_training/evaluate_baseline_vs_finetuned.py,
+        # which needs two live instances (baseline vs. fine-tuned) side by
+        # side without mutating global settings between them. The normal
+        # app path (no argument) keeps resolving through Settings, same as
+        # before this parameter existed.
+        self._model_name = model_name or resolve_reranker_model_name(get_settings())
         self._model: Any = None  # lazy: loaded on first rerank() call, in a
         # worker thread — not at construction, and not blocking the event
         # loop even on that first call.

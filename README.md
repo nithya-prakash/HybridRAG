@@ -120,7 +120,7 @@ fully runnable even with the OpenAI providers configured and no real key present
 cd backend
 uv sync --dev
 uv run alembic upgrade head
-uv run pytest                       # 220 tests, ~97% coverage
+uv run pytest                       # 238 tests, ~98% coverage
 uv run pytest --cov --cov-report=term-missing
 
 uv run pytest ../eval/tests                     # eval harness's own unit tests (metrics math)
@@ -184,7 +184,143 @@ from ~70s — a real bug meant the local backend never bounded output length; se
 `eval/RESULTS.md`) on CPU-bound local `llama3.2:3b` (a hosted API or GPU inference would be
 much faster).
 
-**Testing:** 220 tests, 0 failed, 97% code coverage.
+**Testing:** 238 tests, 98% code coverage — see `eval/RESULTS.md` for 3 pre-existing,
+unrelated local-environment failures found while re-verifying this count.
+
+## Reranker fine-tuning
+
+The reranker (`cross-encoder/ms-marco-MiniLM-L-6-v2`) had never been adapted to this
+project's actual corpus — a general-purpose MS MARCO model reordering candidates from an
+8-document internal knowledge base it was never trained on. `eval/reranker_training/`
+fine-tunes it on this corpus and evaluates the result against the frozen baseline on the
+full, untouched 116-query benchmark — proving or honestly disproving an improvement, not
+assuming one. The LLM is untouched throughout; only the cross-encoder is fine-tuned.
+
+**Training data, built without an LLM call and without touching the 116-query benchmark:**
+every indexed chunk's nearest section heading becomes a natural-sounding pseudo-query via a
+small fixed template set (e.g. a chunk under `## Encryption Standards` → "What are the
+encryption standards?"), chosen deterministically per chunk (a stable hash, not Python's
+randomized `hash()`) — same chunk, same template, every run. The source chunk is the
+positive; **hard negatives are mined from the real production retrieval pipeline** — real
+dense + BM25 search, fused with the real RRF implementation, top candidates that aren't the
+source chunk. The 8 documents are split 75/25 (6 train / 2 calibration) by a seeded shuffle
+so no chunk crosses that boundary, and every generated pseudo-query is checked against the
+116 real benchmark queries for exact-string collisions (zero found) before anything is
+written — see `eval/reranker_training/generate_training_data.py`.
+
+**Real dataset:** 195 training examples (39 positive, 156 hard negative, from 6 documents/39
+chunks) and 55 calibration examples (11 positive, 44 hard negative, from 2 held-out
+documents/11 chunks) — see `eval/reranker_training/data/dataset_stats.json`.
+
+**Training:** `sentence-transformers`'s native `CrossEncoderTrainer` +
+`BinaryCrossEntropyLoss` (the same loss family the base MS MARCO models were themselves
+trained with) — 4 epochs, batch size 16, learning rate 2e-5, seed 42 fixed throughout
+(`random`/`numpy`/`torch`/the HF Trainer's own `seed=`), CPU-only. Real training run: 117s
+wall time, calibration-split eval loss 0.0671 → 0.0581 → 0.0598 → 0.0622 across the 4
+epochs — drops sharply then ticks back up slightly, real evidence of mild overfitting by
+epoch 4 on a genuinely tiny dataset, reported as measured rather than only showing the best
+epoch. See `eval/reranker_training/models/training_metadata.json` for the full config/log.
+
+**Baseline vs. fine-tuned, on the full, untouched 116-query benchmark, same threshold for
+both:**
+
+| Metric | Baseline | Fine-tuned | Diff |
+|---|---|---|---|
+| Recall@1 | 0.9293 | 0.9293 | +0.0000 |
+| Recall@5 | 1.0000 | 1.0000 | +0.0000 |
+| MRR | 0.9798 | 0.9798 | +0.0000 |
+| NDCG@5 | 0.9864 | 0.9864 | +0.0000 |
+| Hallucination-guard precision | 0.7647 | 0.8462 | +0.0815 |
+| Hallucination-guard recall | 0.7647 | 0.6471 | −0.1176 |
+| Hallucination-guard F1 | 0.7647 | 0.7333 | −0.0314 |
+| Reranking latency (mean) | 863.3ms | 983.1ms | +119.8ms |
+
+**Read honestly — this is not an improvement, and isn't reported as one:** retrieval-ranking
+quality (Recall@1/5/10, MRR, NDCG@5) is **exactly unchanged** — the fine-tuned model puts
+the same chunk at the same rank on every one of the 116 real queries as the baseline does.
+The hallucination guard shows a real tradeoff, not a win: precision improved (fewer
+answerable questions wrongly declined) at the cost of recall (2 fewer genuinely unanswerable
+questions caught), landing F1 slightly *below* the baseline at the current threshold.
+Latency: three separate real runs measured gaps of +27ms/+56ms/+120ms on an unchanged
+~850-900ms baseline — a consistent direction, a 4x-noisy magnitude, most plausibly real
+system-load variance on this shared machine rather than a genuine per-inference cost
+difference between two architecturally identical models. The most likely honest explanation
+for the null ranking result: 39 positive training examples from a single 8-document corpus
+is a genuinely small fine-tuning set — plausibly too small to move a cross-encoder's
+relative ranking behavior, while still being enough to measurably shift its absolute score
+distribution (see below). **The statement this work supports is: "fine-tuned a cross-encoder
+reranker using hard-negative retrieval examples and evaluated it against the frozen MS MARCO
+baseline on a held-out benchmark" — not a claim of improvement, because the benchmark doesn't
+show one.**
+
+**Statistical analysis, not just observation:** McNemar's exact test (the right tool for two
+classifiers paired on the same items — see `eval/reranker_training/paired_stats.py`, no new
+dependency added) on the guard's per-query correct/incorrect outcome found the precision/
+recall tradeoff above is **not statistically significant** (b=2, c=2, p=1.0 — a perfectly
+symmetric split, exactly what pure chance would produce). Recall@1's paired comparison found
+literally **zero** disagreement between the two models on any of the 116 queries
+(0 discordant pairs). 95% bootstrap CIs on each model's own Recall@1 (`[0.879, 0.970]`) and
+MRR (`[0.960, 0.995]`) are identical between baseline and fine-tuned, since every per-query
+value is. Full numbers and methodology in `eval/RESULTS.md`.
+
+**Threshold recalibration — checked, not blindly applied:** the fine-tuned model's scores
+did shift measurably from the baseline's (median score difference of 2.70 on the calibration
+split), and a sweep on that split alone found a much higher candidate threshold (F1 0.989 at
+threshold ≈1.63 on that split). This candidate is **not** adopted: `rag_min_rerank_score`
+stays at `-0.6`. Three real reasons — the calibration split's label (this chunk vs. a
+same-split hard negative *for this specific pseudo-query*) is a narrower proxy than the
+benchmark's real target (a genuinely *unanswerable question* — no good chunk anywhere in the
+corpus); the split is small (55 examples) and skewed toward negatives (80%), the opposite
+imbalance from the real benchmark (85% answerable); and re-running this exact calibration
+against an independently-retrained checkpoint moved the recommended threshold from ≈3.34 to
+≈1.63 — a large swing for what should be a stable number, itself real evidence this
+candidate is fitting the split's specific quirks rather than a generalizable shift. See
+`eval/RESULTS.md` for the full reasoning and `eval/reranker_training/calibrate_threshold.py`.
+
+**Integrate it yourself:**
+
+```bash
+RERANKER_MODEL=baseline    # default — cross-encoder/ms-marco-MiniLM-L-6-v2, unchanged
+RERANKER_MODEL=finetuned   # resolves to RERANKER_FINETUNED_PATH's checkpoint
+```
+
+**The fine-tuned model was NOT promoted to production, and this is enforced in code, not
+just in this paragraph.** The default (`RERANKER_MODEL` unset, or explicitly `baseline`)
+stays the shipped MS MARCO reranker. `app/core/startup_checks.py::validate_production_settings`
+actively **rejects** `RERANKER_MODEL=finetuned` outside `local`/`test` environments at
+startup — an accidental `RERANKER_MODEL=finetuned` in a deploy config fails loud at boot
+with a message pointing back to this section, rather than silently serving a
+worse-evaluated model.
+
+**Scope of this finding:** this is a domain-specific evaluation — one small model,
+fine-tuned on one 8-document internal corpus, with deterministic heading-derived synthetic
+queries. It's evidence about *this* experiment, not a general claim that reranker
+fine-tuning doesn't help RAG systems, or that it wouldn't help with a larger, more diverse
+training set or real user query logs. See `eval/RESULTS.md` for the full scoping discussion.
+
+**Limitations, stated plainly:** the training corpus is this project's own 8 fixture
+documents (50 chunks) — real content, but small; pseudo-queries are heading-derived
+templates, not real user questions (a disclosed, deliberate choice — see the confirmed
+design decision in this feature's commit history — over depending on this machine's
+documented Ollama flakiness for a core reproducibility artifact); the fine-tuned checkpoint
+is not baked into the production Docker image (`RERANKER_MODEL=finetuned` is a local/
+eval-only path today, not a supported deployment target); and the exact hard-negative
+examples mined for training have a real, root-caused, and only partially fixable source of
+run-to-run non-determinism (CPU floating-point + approximate vector search) — dataset
+composition (counts, splits, zero benchmark leakage) is fully reproducible; the exact
+low-ranked negative selected at the margin isn't always. Full diagnosis in
+`eval/RESULTS.md`.
+
+**Reproduce exactly:**
+
+```bash
+cd backend
+uv sync --group training
+uv run python ../eval/reranker_training/generate_training_data.py
+uv run python ../eval/reranker_training/train_reranker.py
+uv run python ../eval/reranker_training/evaluate_baseline_vs_finetuned.py
+uv run python ../eval/reranker_training/calibrate_threshold.py
+```
 
 ## Design decisions
 

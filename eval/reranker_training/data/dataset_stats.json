@@ -1,0 +1,36 @@
+{
+  "document_split_seed": 42,
+  "calibration_fraction_target": 0.25,
+  "train_documents": [
+    "compensation_and_benefits",
+    "customer_success_playbook",
+    "employee_handbook",
+    "incident_response_runbook",
+    "product_faq",
+    "security_policy"
+  ],
+  "calibration_documents": [
+    "engineering_practices",
+    "enterprise_console_faq"
+  ],
+  "n_chunks_total": 50,
+  "n_chunks_train": 39,
+  "n_chunks_calibration": 11,
+  "retrieval_top_k_for_mining": 30,
+  "max_hard_negatives_per_query": 4,
+  "template_usage_counts": {
+    "0": 9,
+    "1": 13,
+    "2": 4,
+    "3": 10,
+    "4": 8,
+    "5": 6
+  },
+  "n_examples_train": 195,
+  "n_examples_train_positive": 39,
+  "n_examples_train_hard_negative": 156,
+  "n_examples_calibration": 55,
+  "n_examples_calibration_positive": 11,
+  "n_examples_calibration_hard_negative": 44,
+  "n_pseudo_query_collisions_with_real_benchmark": 0
+}

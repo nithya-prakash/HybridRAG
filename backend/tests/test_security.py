@@ -77,6 +77,42 @@ def test_validate_production_settings_skips_check_outside_production_environment
     validate_production_settings(settings)  # must not raise despite the insecure default
 
 
+def test_validate_production_settings_rejects_finetuned_reranker_alias():
+    # eval/reranker_training/'s fine-tuned reranker showed a real precision/
+    # recall tradeoff on the held-out benchmark and was never promoted — this
+    # must fail loud outside local/test, not just be undocumented.
+    settings = Settings(
+        environment="staging",
+        jwt_secret_key="a-real-random-secret",
+        cors_origins=["https://app.example.com"],
+        reranker_model="finetuned",
+    )
+
+    with pytest.raises(InsecureConfigurationError):
+        validate_production_settings(settings)
+
+
+def test_validate_production_settings_allows_baseline_reranker_alias():
+    settings = Settings(
+        environment="staging",
+        jwt_secret_key="a-real-random-secret",
+        cors_origins=["https://app.example.com"],
+        reranker_model="baseline",
+    )
+
+    validate_production_settings(settings)  # must not raise
+
+
+def test_validate_production_settings_allows_the_unset_default_reranker():
+    settings = Settings(
+        environment="staging",
+        jwt_secret_key="a-real-random-secret",
+        cors_origins=["https://app.example.com"],
+    )
+
+    validate_production_settings(settings)  # must not raise — default is already baseline
+
+
 # --- server-side input validation, independent of the client ------------------
 
 
