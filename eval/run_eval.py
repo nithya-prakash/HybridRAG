@@ -321,6 +321,7 @@ async def generate_and_score(
         "declined": declined,
         "second_layer_catch": second_layer_catch,
         "answer": answer,
+        "context": context_block,  # kept so eval/ragas_eval.py can score it
         "reference_answer": query.reference_answer,
         "faithfulness": round(faithfulness.score, 4),
         "faithfulness_rationale": faithfulness.rationale,

@@ -108,6 +108,22 @@ class GroqChatBackend(OpenAIChatBackend):
         )
 
 
+class GeminiChatBackend(OpenAIChatBackend):
+    """Gemini via Google's OpenAI-compatible endpoint; same override-only
+    pattern as GroqChatBackend."""
+
+    _provider_name = "gemini"
+
+    def __init__(self, client: AsyncOpenAI | None = None) -> None:
+        settings = get_settings()
+        self._model = settings.gemini_chat_model
+        self._max_tokens = settings.rag_max_completion_tokens
+        self._client = client or AsyncOpenAI(
+            api_key=settings.gemini_api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        )
+
+
 class OllamaChatBackend(ChatBackend):
     """Talks to a local Ollama server's native `/api/chat` endpoint (not the
     OpenAI-compatible shim Ollama also exposes — the native API reports
@@ -201,4 +217,6 @@ def get_chat_backend() -> ChatBackend:
         return OpenAIChatBackend()
     if settings.chat_provider == "groq":
         return GroqChatBackend()
+    if settings.chat_provider == "gemini":
+        return GeminiChatBackend()
     return OllamaChatBackend()

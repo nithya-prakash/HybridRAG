@@ -1,0 +1,8 @@
+**/node_modules
+**/.next
+.git
+**/__pycache__
+**/*.pyc
+**/.venv
+**/venv
+Decision-Support-System-for-Knowledge-Retrieval-RAG-Based-

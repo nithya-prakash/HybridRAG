@@ -1,64 +1,28 @@
-# RAG Knowledge Assistant
+# HybridRAG
 
-**[Live demo →](https://hybridrag-nithya-prakash.vercel.app)** (Render free tier — first
-request after inactivity may take 30-50s)
+Multi-user document Q&A: hybrid dense + BM25 retrieval, cross-encoder reranking, cited streamed answers, and an honest "I don't know" when the documents don't contain the answer.
 
-A production-grade, multi-user RAG assistant: upload documents, ask questions in a chat
-interface, get answers grounded in your own content with inline citations — not a generic
-LLM wrapper. Demonstrates multi-tenant isolation, hybrid dense+keyword retrieval with RRF
-and cross-encoder reranking, two layers of hallucination mitigation, security hardening, a
-labeled evaluation harness, and a reranker fine-tuning experiment. Full rationale in
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and [`docs/PROGRESS.md`](docs/PROGRESS.md).
+[![CI](https://github.com/nithya-prakash/HybridRAG/actions/workflows/ci.yml/badge.svg)](https://github.com/nithya-prakash/HybridRAG/actions/workflows/ci.yml) ![Python 3.12](https://img.shields.io/badge/python-3.12-blue) ![License MIT](https://img.shields.io/badge/license-MIT-green)
 
-![Demo: register, upload a document, and ask a question in the chat UI](docs/screenshots/demo.gif)
+![Register, upload a document, ask a question](docs/screenshots/demo.gif)
 
-*Register → upload → chat, against a live local instance. Local models by default
-(`sentence-transformers` + Ollama) — no API key required; OpenAI is a supported alternative.*
+*Register → upload → chat, against a local instance (local models, no API key).*
 
-## What it does
+## Results
 
-1. **Register / log in** — JWT access + refresh tokens in `httpOnly` cookies.
-2. **Upload a document** (PDF/DOCX/TXT/MD) — structure-aware chunking (respects headings),
-   embedded and indexed in the background.
-3. **Ask a question** — query rewrite → dense (Qdrant) + BM25 (Postgres) → RRF fusion →
-   cross-encoder rerank → **streamed, cited answer**, or an honest decline if nothing
-   retrieved is actually relevant.
-4. Every other user's documents are invisible to you — isolation enforced at the query
-   layer, not just the UI.
+Measured on my own labeled set: 116 questions over 8 documents (99 answerable, 17 not). Retrieval and guard numbers are from 2026-09 runs of the commands below; generation was re-run 2026-10-08.
 
-## Screenshots
-
-| Document processing | Grounded, cited answer |
+| What | Result |
 |---|---|
-| ![Documents page](docs/screenshots/05_documents_result.png) | ![Chat UI](docs/screenshots/09_chat_response.png) |
+| Retrieval, dense + BM25 + RRF + reranker | Recall@1 **0.929**, Recall@5 **1.000**, MRR **0.980** |
+| Dense only (baseline) | Recall@1 0.924, Recall@5 0.995, MRR 0.976 |
+| BM25 only (baseline) | Recall@1 0.798, Recall@5 0.975, MRR 0.900 |
+| Hallucination guard (decline before generating) | accuracy 93.1%, precision 76.5%, recall 76.5% |
+| Generation, `qwen2.5:3b` local, 20-question sample | faithfulness 0.43, correctness 0.50, abstained correctly 16/20 |
+| RAGAS cross-check, same 20 answers | context precision 0.43 (14 of 15 answered queries scored). RAGAS faithfulness failed: the 3B judge timed out or returned unparseable output on every sample, so no score |
+| Tests | 247 backend + 34 eval, ruff clean |
 
-Both captured local-only (no API key). More in [`docs/screenshots/`](docs/screenshots/).
-
-## Architecture
-
-```
-                         ┌─────────────┐
-                         │   Browser   │
-                         └──────┬──────┘
-                                │ HTTPS (REST + SSE streaming)
-                         ┌──────▼──────┐
-                         │  Frontend   │  Next.js — auth, upload, streaming chat
-                         └──────┬──────┘
-                                │
-                         ┌──────▼──────┐         ┌─────────────┐
-                    ┌───►│   Backend   │◄───────►│    Redis    │  rate limits +
-                    │    │  (FastAPI)  │         │             │  Celery broker
-                    │    └──┬───────┬──┘         └──────┬──────┘
-                    │       │       │                   │
-             ┌──────┴───┐   │  ┌────▼───────┐    ┌──────▼──────┐
-             │ Postgres │   │  │   Qdrant   │    │   Celery    │  parse → chunk
-             │ users ·  │◄──┘  │   vectors  │◄───│   worker    │  → embed → index
-             │ docs+FTS │      └────────────┘    └──────┬──────┘
-             └──────────┘                         ┌──────▼──────┐
-                                                    │   OpenAI /  │  embeddings + chat
-                                                    │   Ollama    │  (local by default)
-                                                    └─────────────┘
-```
+Honest reading: the corpus is small and clean, so retrieval is near ceiling and the reranker adds only about +0.5 point of Recall@1 over dense alone. Generation quality is limited by the 3B local model, not by retrieval. Details and caveats: [eval/RESULTS.md](eval/RESULTS.md).
 
 ## Quickstart
 
@@ -67,117 +31,78 @@ cp backend/.env.example backend/.env
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-Frontend: http://localhost:3000 · API: http://localhost:8000/docs · Health:
-`curl localhost:8000/health`. First boot pulls `llama3.2:3b` (~2GB) once; embedding model
-and reranker are baked into the image. `EMBEDDING_PROVIDER=openai`/`CHAT_PROVIDER=openai`
-swap in OpenAI for either.
+Frontend http://localhost:3000, API docs http://localhost:8000/docs. First boot pulls `llama3.2:3b` (~2 GB). Hosted demo (free tier, backend may be asleep or down): [hybridrag-nithya-prakash.vercel.app](https://hybridrag-nithya-prakash.vercel.app).
 
-## Evaluation
+| Variable | Purpose |
+|---|---|
+| `CHAT_PROVIDER` | `ollama` (default), `openai`, `groq` or `gemini` |
+| `EMBEDDING_PROVIDER` | `local` (default, bge-small) or `openai` |
+| `OLLAMA_BASE_URL`, `OLLAMA_CHAT_MODEL` | local model endpoint and name |
+| `OPENAI_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY` | only for the matching hosted provider |
+| `JWT_SECRET_KEY`, `CORS_ORIGINS` | must be set to non-defaults outside local/test; the app refuses to start otherwise |
 
-Full, reproducible framework in [`eval/`](eval/README.md) — every number below is from an
-actual run against the real pipeline. Full narrative in [`eval/RESULTS.md`](eval/RESULTS.md).
+## How it works
+
+```mermaid
+flowchart LR
+  U[Upload PDF/DOCX/TXT/MD] --> C[Celery: parse, chunk by heading, embed]
+  C --> Q[(Qdrant vectors)]
+  C --> P[(Postgres full-text)]
+  A[Question] --> R[Rewrite with chat history]
+  R --> D[Dense search] & B[BM25 search]
+  Q --> D
+  P --> B
+  D & B --> F[RRF fusion] --> X[Cross-encoder rerank]
+  X --> G{Score above threshold?}
+  G -- no --> N[Decline]
+  G -- yes --> L[LLM answer with citations, streamed]
+```
+
+Stack: FastAPI, Postgres, Qdrant, Redis/Celery, Next.js. Every query is filtered by user at the retrieval layer, so one user cannot see another's documents. More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Usage
+
+1. Register, log in (JWT in httpOnly cookies, CSRF token).
+2. Upload documents on the Documents page; wait for status `ready`.
+3. Ask questions in Chat. Answers stream with inline citations, or the app declines.
+
+Optional: `automation/n8n/document_intake.json` is an n8n workflow that ingests a file by URL. Run end to end once in n8n 2.42.5 (ingest returned `ready`); see `automation/n8n/README.md` for what was and wasn't covered.
+
+## Limitations
+
+- Guard recall tops out at 76.5%: about 1 in 4 unanswerable questions still reaches the LLM. A threshold sweep found no better setting.
+- Evaluation set is 116 questions over 8 documents I wrote or chose, so it is small and not independent. Generation numbers use a 20-question sample, and the judge is the same 3B model that wrote the answers.
+- Fine-tuning the reranker on this corpus changed no ranking (null result, p = 1.0), so it is not used. Details in [docs/details.md](docs/details.md).
+- Local generation is slow on CPU (tens of seconds per answer).
+- Gemini, Groq and OpenAI chat paths are covered by unit tests only, never run live (no paid keys).
+- Hosted demo runs on free tiers; the Render backend was unreachable on 2026-10-08.
+- Single-VM Docker Compose deployment; no Kubernetes, TLS proxy or automated CD.
+
+## Repository layout
+
+```
+backend/   FastAPI app, Alembic migrations, tests
+frontend/  Next.js UI
+eval/      labeled dataset, metrics, run scripts, RAGAS cross-check, reranker experiment
+infra/     dev docker-compose and Dockerfiles
+docs/      ARCHITECTURE, API, DEPLOY_FREE_TIER, PROGRESS, details
+automation/n8n/  document-intake workflow (run once, see its README)
+```
+
+## Checks
 
 ```bash
 cd backend && uv sync --dev && uv run alembic upgrade head
-uv run pytest                                  # 238 tests, 98% coverage
-uv run python ../eval/run_all.py               # retrieval + guard + latency (no LLM calls)
-uv run python ../eval/run_all.py --generation-sample 20   # + real generation eval
+uv run ruff check . && uv run pytest              # backend tests
+uv run pytest ../eval/tests                       # eval tests
+uv run python ../eval/run_eval.py --retrieval-only   # retrieval table, no LLM
+uv run python ../eval/run_all.py                  # retrieval + guard + latency
+pip install -r ../eval/requirements-ragas.txt     # in a separate venv
+python ../eval/ragas_eval.py ../eval/results/generation_qwen2.5-3b.json
 ```
 
-**Dataset:** 116 labeled queries, 8 documents, 50 chunks (99 answerable, 17 unanswerable),
-across 8 question categories.
+CI runs lint, tests, dependency audit, eval and image builds on every push.
 
-| Retrieval | Recall@1 | Recall@5 | MRR | NDCG@5 |
-|---|---|---|---|---|
-| Dense only | 0.924 | 0.995 | 0.976 | 0.979 |
-| BM25 only | 0.798 | 0.975 | 0.900 | 0.912 |
-| Dense + BM25 + RRF | 0.904 | 1.000 | 0.970 | 0.976 |
-| Dense + BM25 + RRF + Reranker | **0.929** | 1.000 | **0.980** | **0.986** |
+## Roadmap and license
 
-- **Hallucination guard** (real retrieval + reranker score, no LLM call): 93.1% accuracy,
-  76.5% precision/recall, F1 0.765 — TP=13, TN=95, FP=4, FN=4. Threshold calibrated via
-  exhaustive sweep over the full labeled score distribution, recalibrated three times as the
-  dataset grew.
-- **Generation** (real `llama3.2:3b` via Ollama, 20-query stratified sample): faithfulness
-  0.864, answer correctness 0.727, citation correctness 0.864 on answered queries;
-  abstention 13/20.
-- **Latency:** retrieval ~8ms mean, reranking ~1.08s mean (p95 1.4s), generation ~46s mean
-  (down from ~70s after fixing a real unbounded-output-length bug) — CPU-bound local model.
-- **Testing:** 238 tests, 98% coverage.
-
-## Reranker fine-tuning
-
-`eval/reranker_training/` fine-tunes the shipped reranker (`cross-encoder/ms-marco-
-MiniLM-L-6-v2`) on this project's own corpus and A/B tests it against the frozen baseline on
-the full, untouched 116-query benchmark. Training data: each chunk's heading becomes a
-deterministic pseudo-query (no LLM call), the chunk is the positive, **hard negatives are
-mined from the real dense+BM25+RRF pipeline**. 8 documents split 75/25 (6 train/2
-calibration, seeded) so no chunk crosses that boundary; every query checked against the 116
-benchmark queries for collisions (zero found). Real dataset: 195 train examples (39
-positive/156 hard negative) + 55 calibration examples. Training: `CrossEncoderTrainer` +
-`BinaryCrossEntropyLoss`, 4 epochs, seed 42 throughout, CPU-only, 117s wall time.
-
-| Metric | Baseline | Fine-tuned | Diff |
-|---|---|---|---|
-| Recall@1 / Recall@5 / MRR / NDCG@5 | 0.9293 / 1.000 / 0.9798 / 0.9864 | identical | +0.0000 |
-| Hallucination-guard precision | 0.7647 | 0.8462 | +0.0815 |
-| Hallucination-guard recall | 0.7647 | 0.6471 | −0.1176 |
-| Hallucination-guard F1 | 0.7647 | 0.7333 | −0.0314 |
-| Reranking latency (mean) | 863.3ms | 983.1ms | +119.8ms (noisy) |
-
-**Honest result: a null finding, not an improvement.** Retrieval ranking is unchanged on
-every query. The guard's precision/recall tradeoff is real but **not statistically
-significant** (McNemar's exact test, b=2, c=2, p=1.0 — a perfectly symmetric split).
-Threshold recalibration was checked on a held-out calibration split and rejected (the
-recommendation swung from ≈3.34 to ≈1.63 across independent retrains — unstable). **Not
-promoted to production** — `RERANKER_MODEL=baseline` is the enforced default; `finetuned` is
-actively blocked outside local/test at startup, fail-fast. Full write-up, statistical
-methodology, and a real reproducibility-bug fix found along the way:
-[`eval/RESULTS.md`](eval/RESULTS.md).
-
-## Design decisions
-
-Full depth in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-
-- **Structure-aware chunking** — never merges content across a heading boundary.
-- **Hybrid retrieval, RRF, then reranked** — reranking measurably earns its latency cost.
-- **Two independent hallucination-mitigation layers** — a rerank-score threshold before
-  generation, recalibrated three times against real evidence, plus a generation-prompt
-  constraint that live-tested catches what the threshold misses.
-- **Multi-tenant isolation at the query layer** — no "search everything" method exists.
-- **Fail-fast on insecure production config** — refuses to start with default secrets, a
-  wildcard CORS origin, or the unvalidated fine-tuned reranker.
-- **CSRF defense-in-depth** — non-httpOnly double-submit-cookie token.
-
-## Deployment
-
-```bash
-cp .env.prod.example .env
-docker compose -f docker-compose.prod.yml up -d --build
-./scripts/smoke_test.sh
-```
-
-Single VM + Docker Compose, chosen over Kubernetes/managed PaaS to keep the deployment
-story fully inspectable. No public ports on internal services, resource limits, auto
-migrations. CI builds/pushes images to GHCR on every merge. The live demo above uses a
-separate $0/month path (Render + Qdrant Cloud + Upstash + Vercel) — see
-[`docs/DEPLOY_FREE_TIER.md`](docs/DEPLOY_FREE_TIER.md).
-
-## Project structure
-
-```
-.
-├── backend/    FastAPI application (Python, uv)
-├── frontend/   Next.js application (TypeScript)
-├── infra/      dev docker-compose.yml + Dockerfiles
-├── eval/       evaluation harness + reranker fine-tuning
-├── docs/       ARCHITECTURE.md + PROGRESS.md
-└── .github/workflows/   CI: lint, test, audit, image build+push
-```
-
-## Status
-
-Full planned scope complete. What remains is disclosed, deliberate tradeoffs, not gaps: a
-proven 76.5% hallucination-guard recall ceiling (exhaustive sweep confirmed no threshold
-moves it further), and no managed cloud/Kubernetes (a deliberate single-VM scope choice).
-See `docs/ARCHITECTURE.md`'s "What's deliberately deferred" for the full list.
+Next: evaluate with a stronger judge model, grow the question set beyond 8 documents, a hosted demo that stays up. MIT, see [LICENSE](LICENSE).

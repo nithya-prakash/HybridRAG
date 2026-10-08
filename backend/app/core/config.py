@@ -99,7 +99,7 @@ class Settings(BaseSettings):
     # per-token cost isn't wanted either. All three implement the same
     # `ChatBackend` interface (`app/core/chat.py`), so nothing downstream of
     # `get_chat_backend()` needs to know or care which one is active.
-    chat_provider: Literal["ollama", "openai", "groq"] = "ollama"
+    chat_provider: Literal["ollama", "openai", "groq", "gemini"] = "ollama"
     ollama_base_url: str = "http://ollama:11434"
     # A small instruction-tuned model, chosen for reasonable CPU inference
     # latency in a self-hosted/portfolio context — swap for a larger model
@@ -110,6 +110,10 @@ class Settings(BaseSettings):
     # Groq
     groq_api_key: str | None = None
     groq_chat_model: str = "openai/gpt-oss-120b"
+
+    # Gemini (via Google's OpenAI-compatible endpoint, same pattern as Groq)
+    gemini_api_key: str | None = None
+    gemini_chat_model: str = "gemini-2.5-flash"
 
     # Auth
     jwt_secret_key: str = "change-me-in-env"

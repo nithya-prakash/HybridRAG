@@ -7,6 +7,7 @@ import pytest
 
 from app.core.chat import (
     ChatBackend,
+    GeminiChatBackend,
     GroqChatBackend,
     OllamaChatBackend,
     OpenAIChatBackend,
@@ -409,3 +410,33 @@ async def test_ollama_stream_complete_records_token_usage_from_final_chunk():
         LLM_TOKENS_TOTAL.labels("ollama", "chat_stream", "prompt")._value.get()
         == prompt_before + 9
     )
+
+
+# --- GeminiChatBackend (OpenAI-compatible; same inheritance as Groq) ---
+
+
+async def test_gemini_complete_uses_configured_model_and_label():
+    client = AsyncMock()
+    client.chat.completions.create.return_value = _completion_response("hi from gemini")
+    backend = GeminiChatBackend(client=client)
+
+    assert await backend.complete([{"role": "user", "content": "hello"}]) == "hi from gemini"
+    kwargs = client.chat.completions.create.call_args.kwargs
+    assert kwargs["model"] == get_settings().gemini_chat_model
+    assert backend._provider_name == "gemini"
+
+
+def test_gemini_backend_targets_google_openai_base_url(monkeypatch):
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-fake-key")
+    backend = GeminiChatBackend()
+    assert str(backend._client.base_url) == "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+def test_get_chat_backend_returns_gemini_backend(monkeypatch):
+    monkeypatch.setattr(get_settings(), "chat_provider", "gemini")
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "test-fake-key")
+    get_chat_backend.cache_clear()
+    try:
+        assert isinstance(get_chat_backend(), GeminiChatBackend)
+    finally:
+        get_chat_backend.cache_clear()

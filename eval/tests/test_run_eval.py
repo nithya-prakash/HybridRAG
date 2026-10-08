@@ -9,7 +9,6 @@ threshold missed. See eval/RESULTS.md for the real run that surfaced this.
 import uuid
 
 import pytest
-from httpx import ASGITransport, AsyncClient
 
 from app.core.config import get_settings
 from app.services.rag.prompts import INSUFFICIENT_CONTEXT_MESSAGE
