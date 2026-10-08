@@ -1,7 +1,6 @@
 # HybridRAG — extended notes (previous long README)
 
-**[Live demo →](https://hybridrag-nithya-prakash.vercel.app)** (Render free tier — first
-request after inactivity may take 30-50s)
+*(No hosted demo: the free-tier deployment is offline. Run it locally, see the README.)*
 
 A production-grade, multi-user RAG assistant: upload documents, ask questions in a chat
 interface, get answers grounded in your own content with inline citations — not a generic
@@ -159,7 +158,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 Single VM + Docker Compose, chosen over Kubernetes/managed PaaS to keep the deployment
 story fully inspectable. No public ports on internal services, resource limits, auto
-migrations. CI builds/pushes images to GHCR on every merge. The live demo above uses a
+migrations. CI builds/pushes images to GHCR on every merge. The optional free-tier path (not currently deployed) uses a
 separate $0/month path (Render + Qdrant Cloud + Upstash + Vercel) — see
 [`DEPLOY_FREE_TIER.md`](DEPLOY_FREE_TIER.md).
 

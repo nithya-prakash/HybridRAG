@@ -45,7 +45,12 @@ for _p in (_REPO_ROOT, _REPO_ROOT / "backend"):
 
 import httpx  # noqa: E402
 
-from app.core.chat import ChatBackend, OllamaChatBackend, OpenAIChatBackend  # noqa: E402
+from app.core.chat import (  # noqa: E402
+    ChatBackend,
+    OllamaChatBackend,
+    OpenAIChatBackend,
+    get_chat_backend,
+)
 from app.core.config import Settings, get_settings  # noqa: E402
 from app.core.db import AsyncSessionLocal  # noqa: E402
 from app.core.embeddings import (  # noqa: E402
@@ -533,6 +538,14 @@ async def run(args: argparse.Namespace) -> dict:
         chat_mode = "real"
         chat_backend_label = f"openai:{settings.openai_chat_model}"
         judge_backend_label = f"openai:{settings.openai_chat_model} (same model as generation)"
+    elif settings.chat_provider in ("groq", "gemini") and getattr(
+        settings, f"{settings.chat_provider}_api_key"
+    ):
+        chat_backend = get_chat_backend()
+        chat_mode = "real"
+        model = getattr(settings, f"{settings.chat_provider}_chat_model")
+        chat_backend_label = f"{settings.chat_provider}:{model}"
+        judge_backend_label = f"{settings.chat_provider}:{model} (same model as generation)"
     elif settings.chat_provider == "ollama" and await ollama_reachable(settings):
         chat_backend = OllamaChatBackend()
         chat_mode = "local"

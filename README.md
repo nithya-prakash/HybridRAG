@@ -10,7 +10,7 @@ Multi-user document Q&A: hybrid dense + BM25 retrieval, cross-encoder reranking,
 
 ## Results
 
-Measured on my own labeled set: 116 questions over 8 documents (99 answerable, 17 not). Retrieval and guard numbers are from 2026-09 runs of the commands below; generation was re-run 2026-10-08.
+Measured on my own labeled set: 116 questions over 8 documents (99 answerable, 17 not). Retrieval and guard numbers are from 2026-09 runs of the commands below; generation and RAGAS were re-run 2026-10-08.
 
 | What | Result |
 |---|---|
@@ -18,11 +18,12 @@ Measured on my own labeled set: 116 questions over 8 documents (99 answerable, 1
 | Dense only (baseline) | Recall@1 0.924, Recall@5 0.995, MRR 0.976 |
 | BM25 only (baseline) | Recall@1 0.798, Recall@5 0.975, MRR 0.900 |
 | Hallucination guard (decline before generating) | accuracy 93.1%, precision 76.5%, recall 76.5% |
-| Generation, `qwen2.5:3b` local, 20-question sample | faithfulness 0.43, correctness 0.50, abstained correctly 16/20 |
-| RAGAS cross-check, same 20 answers | context precision 0.43 (14 of 15 answered queries scored). RAGAS faithfulness failed: the 3B judge timed out or returned unparseable output on every sample, so no score |
+| Generation, Groq `gpt-oss-120b`, 20-question sample (17 scored, 3 hit rate limits) | faithfulness 1.00, correctness 0.98 on answered; abstained correctly 14/20 (the 3 errored count as misses) |
+| Generation, local `qwen2.5:3b`, same 20 questions | faithfulness 0.43, correctness 0.50; abstained correctly 16/20 |
+| RAGAS cross-check (Groq judge) | faithfulness 1.00, context precision 1.00, but only 5 samples scored (rest timed out on rate limits) |
 | Tests | 247 backend + 34 eval, ruff clean |
 
-Honest reading: the corpus is small and clean, so retrieval is near ceiling and the reranker adds only about +0.5 point of Recall@1 over dense alone. Generation quality is limited by the 3B local model, not by retrieval. Details and caveats: [eval/RESULTS.md](eval/RESULTS.md).
+Honest reading: the corpus is small and clean, so retrieval is near ceiling and the reranker adds only about +0.5 point of Recall@1 over dense alone. The 3B local model is the weak link in generation: the same questions score far higher on a 120B hosted model, so retrieval is not the bottleneck. The 120B judges its own answers, so those scores are optimistic. Details and caveats: [eval/RESULTS.md](eval/RESULTS.md).
 
 ## Quickstart
 
@@ -31,7 +32,7 @@ cp backend/.env.example backend/.env
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-Frontend http://localhost:3000, API docs http://localhost:8000/docs. First boot pulls `llama3.2:3b` (~2 GB). Hosted demo (free tier, backend may be asleep or down): [hybridrag-nithya-prakash.vercel.app](https://hybridrag-nithya-prakash.vercel.app).
+Frontend http://localhost:3000, API docs http://localhost:8000/docs. First boot pulls `llama3.2:3b` (~2 GB). There is no hosted demo; it runs locally.
 
 | Variable | Purpose |
 |---|---|
@@ -74,8 +75,8 @@ Optional: `automation/n8n/document_intake.json` is an n8n workflow that ingests 
 - Evaluation set is 116 questions over 8 documents I wrote or chose, so it is small and not independent. Generation numbers use a 20-question sample, and the judge is the same 3B model that wrote the answers.
 - Fine-tuning the reranker on this corpus changed no ranking (null result, p = 1.0), so it is not used. Details in [docs/details.md](docs/details.md).
 - Local generation is slow on CPU (tens of seconds per answer).
-- Gemini, Groq and OpenAI chat paths are covered by unit tests only, never run live (no paid keys).
-- Hosted demo runs on free tiers; the Render backend was unreachable on 2026-10-08.
+- Groq was run live (above). Gemini and OpenAI chat paths are covered by unit tests only, never run live.
+- No hosted demo. A free-tier Render/Vercel setup exists ([docs/DEPLOY_FREE_TIER.md](docs/DEPLOY_FREE_TIER.md)) but is not currently deployed.
 - Single-VM Docker Compose deployment; no Kubernetes, TLS proxy or automated CD.
 
 ## Repository layout
@@ -98,11 +99,12 @@ uv run pytest ../eval/tests                       # eval tests
 uv run python ../eval/run_eval.py --retrieval-only   # retrieval table, no LLM
 uv run python ../eval/run_all.py                  # retrieval + guard + latency
 pip install -r ../eval/requirements-ragas.txt     # in a separate venv
-python ../eval/ragas_eval.py ../eval/results/generation_qwen2.5-3b.json
+CHAT_PROVIDER=groq uv run python ../eval/run_eval.py --output ../eval/results/generation_groq.json   # then:
+python ../eval/ragas_eval.py ../eval/results/generation_groq.json   # JUDGE_* env vars select the judge
 ```
 
 CI runs lint, tests, dependency audit, eval and image builds on every push.
 
 ## Roadmap and license
 
-Next: evaluate with a stronger judge model, grow the question set beyond 8 documents, a hosted demo that stays up. MIT, see [LICENSE](LICENSE).
+Next: evaluate with a stronger judge model, grow the question set beyond 8 documents. MIT, see [LICENSE](LICENSE).

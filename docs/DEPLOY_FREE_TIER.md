@@ -1,5 +1,7 @@
 # Free-tier live demo deployment
 
+> **Status: optional and not currently deployed.** The project is documented as local-first. These steps were used for a demo that has since gone offline; they have not been re-verified since.
+
 This is a second deployment path, separate from `docker-compose.prod.yml`'s
 single-VM target (see `README.md` § Deployment and `ARCHITECTURE.md` § Production
 deployment for why that one is the right choice for an actual production
