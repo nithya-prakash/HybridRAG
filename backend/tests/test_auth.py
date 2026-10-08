@@ -1,8 +1,8 @@
 import uuid
 from datetime import timedelta
 
+import jwt
 from httpx import AsyncClient
-from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings

@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
 
 from app.core.config import get_settings
 
@@ -39,7 +39,7 @@ def create_access_token(user_id: uuid.UUID, expires_delta: timedelta | None = No
 def decode_access_token(token: str) -> dict[str, Any] | None:
     try:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
-    except JWTError:
+    except jwt.PyJWTError:
         return None
     if payload.get("type") != TOKEN_TYPE_ACCESS:
         return None

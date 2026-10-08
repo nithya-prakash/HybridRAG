@@ -71,13 +71,9 @@ jobs:
         run: uv run ruff check .
 
       - name: Dependency vulnerability scan (pip-audit)
-        # PYSEC-2026-1325 (ecdsa, pulled in transitively by python-jose) has
-        # no fix version available — a long-standing timing-side-channel
-        # advisory inherent to pure-Python ECDSA implementations. Unreachable
-        # here: this app signs JWTs with HS256 (pure HMAC) exclusively, never
-        # ECDSA — see ARCHITECTURE.md § Security posture for the full record
-        # of this exception. Ignored explicitly, not silently.
-        run: uv run pip-audit --ignore-vuln PYSEC-2026-1325
+        # No ignored advisories: python-jose (and its ecdsa dependency, which
+        # carried PYSEC-2026-1325) was replaced by PyJWT.
+        run: uv run pip-audit
 
       - name: Run migrations
         run: uv run alembic upgrade head

@@ -1091,13 +1091,9 @@ degradation below for the general principle this follows.
   the start) makes this easy to keep true going forward too — a reviewer scanning a log call's kwargs
   for a credential-shaped value is a much easier review than auditing an arbitrary f-string.
 - **Dependency vulnerability scanning**, wired into CI for both halves of the app:
-  - **Backend**: `pip-audit`, run as a CI step. One finding: `ecdsa` (a transitive dependency of
-    `python-jose[cryptography]`, used for JWT handling) has an open advisory (`PYSEC-2026-1325`,
-    the long-standing Minerva timing-side-channel issue in pure-Python ECDSA implementations) with
-    no fix version available. Explicitly ignored via `pip-audit --ignore-vuln PYSEC-2026-1325`, not
-    silently — and genuinely unreachable here: this app signs JWTs exclusively with HS256 (pure
-    HMAC), configured in `settings.jwt_algorithm` since auth was first built, and never exercises
-    `ecdsa`'s ECDSA code path at all.
+  - **Backend**: `pip-audit`, run as a CI step with no ignored advisories. (2026-10-08: JWT handling
+    moved from `python-jose` to `PyJWT`, which also removed the `ecdsa` dependency and its
+    unfixable `PYSEC-2026-1325` exception; `urllib3` bumped to 2.8.0 for three new advisories.)
   - **Frontend**: `npm audit`, run twice in CI — a hard gate (`--omit=dev --audit-level=critical`,
     currently 0 findings) and a full, non-blocking report (`npm audit || true`) for visibility. The
     full picture: 3 high-severity findings in production dependencies (`next`, transitively via
