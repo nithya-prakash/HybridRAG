@@ -6,7 +6,7 @@ Multi-user document Q&A: hybrid dense + BM25 retrieval, cross-encoder reranking,
 
 ![Register, upload a document, ask a question](docs/screenshots/demo.gif)
 
-*Register → upload → chat, against a local instance (local models, no API key).*
+*Register → upload → chat, against a local instance. This recording used Groq for the answer; local Ollama works without a key.*
 
 ## Results
 
