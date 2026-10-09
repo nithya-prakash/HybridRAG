@@ -1,0 +1,547 @@
+{
+ "description": "30 questions over 30 Wikipedia articles (CC BY-SA 4.0) grouped into confusable clusters; see fetch_wiki.py. A harder, larger-corpus counterpart to knowledge_base_eval.json.",
+ "documents": [
+  {
+   "id": "ada_lovelace",
+   "path": "wiki/ada_lovelace.md",
+   "file_type": "md"
+  },
+  {
+   "id": "cologne",
+   "path": "wiki/cologne.md",
+   "file_type": "md"
+  },
+  {
+   "id": "convolutional_neural_network",
+   "path": "wiki/convolutional_neural_network.md",
+   "file_type": "md"
+  },
+  {
+   "id": "danube",
+   "path": "wiki/danube.md",
+   "file_type": "md"
+  },
+  {
+   "id": "elbe",
+   "path": "wiki/elbe.md",
+   "file_type": "md"
+  },
+  {
+   "id": "emmy_noether",
+   "path": "wiki/emmy_noether.md",
+   "file_type": "md"
+  },
+  {
+   "id": "geothermal_energy",
+   "path": "wiki/geothermal_energy.md",
+   "file_type": "md"
+  },
+  {
+   "id": "go_programming_language",
+   "path": "wiki/go_programming_language.md",
+   "file_type": "md"
+  },
+  {
+   "id": "gradient_boosting",
+   "path": "wiki/gradient_boosting.md",
+   "file_type": "md"
+  },
+  {
+   "id": "hamburg",
+   "path": "wiki/hamburg.md",
+   "file_type": "md"
+  },
+  {
+   "id": "hydroelectricity",
+   "path": "wiki/hydroelectricity.md",
+   "file_type": "md"
+  },
+  {
+   "id": "kotlin_programming_language",
+   "path": "wiki/kotlin_programming_language.md",
+   "file_type": "md"
+  },
+  {
+   "id": "lise_meitner",
+   "path": "wiki/lise_meitner.md",
+   "file_type": "md"
+  },
+  {
+   "id": "marie_curie",
+   "path": "wiki/marie_curie.md",
+   "file_type": "md"
+  },
+  {
+   "id": "munich",
+   "path": "wiki/munich.md",
+   "file_type": "md"
+  },
+  {
+   "id": "nuclear_power",
+   "path": "wiki/nuclear_power.md",
+   "file_type": "md"
+  },
+  {
+   "id": "oder",
+   "path": "wiki/oder.md",
+   "file_type": "md"
+  },
+  {
+   "id": "python_programming_language",
+   "path": "wiki/python_programming_language.md",
+   "file_type": "md"
+  },
+  {
+   "id": "random_forest",
+   "path": "wiki/random_forest.md",
+   "file_type": "md"
+  },
+  {
+   "id": "recurrent_neural_network",
+   "path": "wiki/recurrent_neural_network.md",
+   "file_type": "md"
+  },
+  {
+   "id": "rhine",
+   "path": "wiki/rhine.md",
+   "file_type": "md"
+  },
+  {
+   "id": "rosalind_franklin",
+   "path": "wiki/rosalind_franklin.md",
+   "file_type": "md"
+  },
+  {
+   "id": "ruby_programming_language",
+   "path": "wiki/ruby_programming_language.md",
+   "file_type": "md"
+  },
+  {
+   "id": "rust_programming_language",
+   "path": "wiki/rust_programming_language.md",
+   "file_type": "md"
+  },
+  {
+   "id": "solar_power",
+   "path": "wiki/solar_power.md",
+   "file_type": "md"
+  },
+  {
+   "id": "stuttgart",
+   "path": "wiki/stuttgart.md",
+   "file_type": "md"
+  },
+  {
+   "id": "support_vector_machine",
+   "path": "wiki/support_vector_machine.md",
+   "file_type": "md"
+  },
+  {
+   "id": "swift_programming_language",
+   "path": "wiki/swift_programming_language.md",
+   "file_type": "md"
+  },
+  {
+   "id": "transformer_deep_learning",
+   "path": "wiki/transformer_deep_learning.md",
+   "file_type": "md"
+  },
+  {
+   "id": "wind_power",
+   "path": "wiki/wind_power.md",
+   "file_type": "md"
+  }
+ ],
+ "queries": [
+  {
+   "id": "w01",
+   "query": "Who conceived the Python language, and at which research institute in the Netherlands?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "python_programming_language",
+     "content_marker": "Guido van Rossum at Centrum Wiskunde & Informatica (CWI"
+    }
+   ],
+   "reference_answer": "## History Python was conceived in the late 1980s by Guido van Rossum at Centrum Wiskunde & Informatica (CWI) in the Netherlands.",
+   "answerable": true
+  },
+  {
+   "id": "w02",
+   "query": "Which online chat between two developers in 1993 is credited with the origin of Ruby?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "ruby_programming_language",
+     "content_marker": "Keiju Ishitsuka on 24 February 1993, before any code ha"
+    }
+   ],
+   "reference_answer": "The name \"Ruby\" originated during an online chat session between Matsumoto and Keiju Ishitsuka on 24 February 1993, before any code had been written.",
+   "answerable": true
+  },
+  {
+   "id": "w03",
+   "query": "Which company officially sponsored Rust starting in 2009?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "rust_programming_language",
+     "content_marker": "officially sponsored the project in 2009. The first sta"
+    }
+   ],
+   "reference_answer": "Software developer Graydon Hoare created Rust in 2006 while working at Mozilla, which officially sponsored the project in 2009.",
+   "answerable": true
+  },
+  {
+   "id": "w04",
+   "query": "Which three people designed Go at Google in 2007?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "go_programming_language",
+     "content_marker": "Griesemer, Rob Pike, and Ken Thompson, Go was publicly "
+    }
+   ],
+   "reference_answer": "Originally designed in 2007 by Robert Griesemer, Rob Pike, and Ken Thompson, Go was publicly announced in November 2009, and is developed by Google and community contributors.",
+   "answerable": true
+  },
+  {
+   "id": "w05",
+   "query": "Which company covers the language development costs of Kotlin?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "kotlin_programming_language",
+     "content_marker": "bears language development costs, while the Kotlin Foun"
+    }
+   ],
+   "reference_answer": "JetBrains bears language development costs, while the Kotlin Foundation protects the Kotlin trademark.",
+   "answerable": true
+  },
+  {
+   "id": "w06",
+   "query": "Who created Swift in 2010 for Apple?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "swift_programming_language",
+     "content_marker": "created by Chris Lattner in 2010 for Apple Inc. and mai"
+    }
+   ],
+   "reference_answer": "Swift (programming language) Swift is a high-level general-purpose, multi-paradigm, compiled programming language created by Chris Lattner in 2010 for Apple Inc.",
+   "answerable": true
+  },
+  {
+   "id": "w07",
+   "query": "Which river flows through the Danube Delta in Romania into the Black Sea?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "danube",
+     "content_marker": "Danube Delta in Romania into the Black Sea. A large and"
+    }
+   ],
+   "reference_answer": "It flows through Central and Southeastern Europe, from the Black Forest of Germany south through the Danube Delta in Romania into the Black Sea.",
+   "answerable": true
+  },
+  {
+   "id": "w08",
+   "query": "What is the total length of the Elbe?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "elbe",
+     "content_marker": "total length is 1,094 km (680 mi). The Elbe's major tri"
+    }
+   ],
+   "reference_answer": "Its total length is 1,094 km (680 mi).",
+   "answerable": true
+  },
+  {
+   "id": "w09",
+   "query": "Into which lagoon does the Oder flow near Szczecin?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "oder",
+     "content_marker": "Szczecin Lagoon north of Szczecin and then into three b"
+    }
+   ],
+   "reference_answer": "The river ultimately flows into the Szczecin Lagoon north of Szczecin and then into three branches (the Dziwna, Świna and Peene) that empty into the Bay of Pomerania of the Baltic Sea.",
+   "answerable": true
+  },
+  {
+   "id": "w10",
+   "query": "Into which sea does the Rhine finally empty?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "rhine",
+     "content_marker": "North Sea. Draining an area of 185,000 km2, it is the s"
+    }
+   ],
+   "reference_answer": "Finally, the Rhine turns to flow predominantly west to enter the Netherlands, eventually emptying into the North Sea.",
+   "answerable": true
+  },
+  {
+   "id": "w11",
+   "query": "In which year did Marie Curie share the Nobel Prize in Physics with her husband Pierre?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "marie_curie",
+     "content_marker": "1903 Nobel Prize in Physics with her husband, Pierre Cu"
+    }
+   ],
+   "reference_answer": "She shared the 1903 Nobel Prize in Physics with her husband, Pierre Curie, \"for their joint researches on the radioactivity phenomena discovered by Professor Henri Becquerel\".",
+   "answerable": true
+  },
+  {
+   "id": "w12",
+   "query": "Which Austrian and Swedish nuclear physicist was instrumental in the discovery of nuclear fission?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "lise_meitner",
+     "content_marker": "nuclear fission. After completing her doctoral research"
+    }
+   ],
+   "reference_answer": "Lise Meitner Elise \"Lise\" Meitner ( MYTE-ner; German: [ˈliːzə ˈmaɪtnɐ] ; 7 November 1878 – 27 October 1968) was an Austrian and Swedish nuclear physicist who was instrumental in the discovery of nuclear fission.",
+   "answerable": true
+  },
+  {
+   "id": "w13",
+   "query": "Which X-ray diffraction photograph by Rosalind Franklin was key to the structure of DNA?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "rosalind_franklin",
+     "content_marker": "Photo 51, taken by her student Raymond Gosling, which l"
+    }
+   ],
+   "reference_answer": "Franklin is best known for her work on the X-ray diffraction images of DNA while at King's College London, particularly Photo 51, taken by her student Raymond Gosling, which led to the discovery of the DNA double helix for which Francis Crick, James Watson, and Maurice Wilkins shared the Nobel Prize in Physiology or Medicine in 1962.",
+   "answerable": true
+  },
+  {
+   "id": "w14",
+   "query": "Which theorem linking symmetries and conservation laws is named after Emmy Noether?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "emmy_noether",
+     "content_marker": "Noether's theorem, a result in differential invariants "
+    }
+   ],
+   "reference_answer": "Noether's theorem, a result in differential invariants in the calculus of variations, has been called \"one of the most important mathematical theorems ever proved in guiding the development of modern physics\".",
+   "answerable": true
+  },
+  {
+   "id": "w15",
+   "query": "Whose proposed mechanical general-purpose computer is Ada Lovelace chiefly known for work on?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "ada_lovelace",
+     "content_marker": "Charles Babbage's proposed mechanical general-purpose c"
+    }
+   ],
+   "reference_answer": "Ada Lovelace Augusta Ada King, Countess of Lovelace (née Byron; 10 December 1815 – 27 November 1852), also known as Ada Lovelace, was an English mathematician and writer chiefly known for work on Charles Babbage's proposed mechanical general-purpose computer, the analytical engine.",
+   "answerable": true
+  },
+  {
+   "id": "w16",
+   "query": "What are the two ways solar power converts sunlight into electricity?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "solar_power",
+     "content_marker": "photovoltaics (PV) or indirectly using concentrated sol"
+    }
+   ],
+   "reference_answer": "Solar power Solar power, also known as solar electricity, is the conversion of energy from sunlight into electricity, either directly using photovoltaics (PV) or indirectly using concentrated solar power.",
+   "answerable": true
+  },
+  {
+   "id": "w17",
+   "query": "How is wind power generated almost completely today?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "wind_power",
+     "content_marker": "generated almost completely using wind turbines, genera"
+    }
+   ],
+   "reference_answer": "Today, wind power is generated almost completely using wind turbines, generally grouped into wind farms and connected to the electrical grid.",
+   "answerable": true
+  },
+  {
+   "id": "w18",
+   "query": "Which dam surpassed Itaipu in 2008 as the largest hydroelectric producer?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "hydroelectricity",
+     "content_marker": "Three Gorges Dam in China at 22.5 GW. Hydroelectricity "
+    }
+   ],
+   "reference_answer": "The Itaipu Dam opened in 1984 in South America as the largest, producing 14 GW, but was surpassed in 2008 by the Three Gorges Dam in China at 22.5 GW.",
+   "answerable": true
+  },
+  {
+   "id": "w19",
+   "query": "In which city was a geothermal well used to heat greenhouses in 1926?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "geothermal_energy",
+     "content_marker": "greenhouses in Boise in 1926, and geysers were used to "
+    }
+   ],
+   "reference_answer": "A geothermal well was used to heat greenhouses in Boise in 1926, and geysers were used to heat greenhouses in Iceland and Tuscany at about the same time.",
+   "answerable": true
+  },
+  {
+   "id": "w20",
+   "query": "Which two accidents, in 1979 and 1986, increased regulation of and opposition to nuclear power plants?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "nuclear_power",
+     "content_marker": "Chernobyl disaster in the Soviet Union resulted in incr"
+    }
+   ],
+   "reference_answer": "The 1979 Three Mile Island accident in the United States and the 1986 Chernobyl disaster in the Soviet Union resulted in increased regulation and public opposition to nuclear power plants.",
+   "answerable": true
+  },
+  {
+   "id": "w21",
+   "query": "Which annual event is described as the world's largest Volksfest in Munich?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "munich",
+     "content_marker": "Oktoberfest, the world's largest Volksfest."
+    }
+   ],
+   "reference_answer": "Munich is known for its architecture, cultural venues, sports events, exhibitions, and the annual Oktoberfest, the world's largest Volksfest.",
+   "answerable": true
+  },
+  {
+   "id": "w22",
+   "query": "Which port is Germany's largest and Europe's third-largest after Rotterdam and Antwerp?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "hamburg",
+     "content_marker": "Port of Hamburg is Germany's largest and Europe's third"
+    }
+   ],
+   "reference_answer": "The Port of Hamburg is Germany's largest and Europe's third-largest, after Rotterdam and Antwerp.",
+   "answerable": true
+  },
+  {
+   "id": "w23",
+   "query": "Which two automobile museums reflect Stuttgart's status as Germany's car capital?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "stuttgart",
+     "content_marker": "Mercedes-Benz Museum and Porsche Museum, as well as num"
+    }
+   ],
+   "reference_answer": "As such, it is home to famous automobile museums like the Mercedes-Benz Museum and Porsche Museum, as well as numerous auto-enthusiast magazines, which contributes to Stuttgart's status as Germany's \"Autohauptstadt\" (\"car capital city\"/\"capital of cars\").",
+   "answerable": true
+  },
+  {
+   "id": "w24",
+   "query": "Which cathedral was the world's tallest building from 1880 to 1890?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "cologne",
+     "content_marker": "Cologne Cathedral (Kölner Dom) was the world's tallest "
+    }
+   ],
+   "reference_answer": "The city's medieval Cologne Cathedral (Kölner Dom) was the world's tallest building from 1880 to 1890 and is today the third-tallest church and tallest cathedral in the world.",
+   "answerable": true
+  },
+  {
+   "id": "w25",
+   "query": "Which mechanism are transformer architectures based on?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "transformer_deep_learning",
+     "content_marker": "multi-head attention mechanism, in which input data suc"
+    }
+   ],
+   "reference_answer": "Transformer (deep learning) In deep learning, the transformer is a family of artificial neural network architectures based on the multi-head attention mechanism, in which input data such as text, images, or audio is converted to a sequence of numerical representations called tokens, and each token is converted into a vector through an embedding layer.",
+   "answerable": true
+  },
+  {
+   "id": "w26",
+   "query": "Why are vanishing and exploding gradients prevented in convolutional neural networks?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "convolutional_neural_network",
+     "content_marker": "regularization that comes from using shared weights ove"
+    }
+   ],
+   "reference_answer": "Vanishing gradients and exploding gradients, seen during backpropagation in earlier neural networks, are prevented by the regularization that comes from using shared weights over fewer connections.",
+   "answerable": true
+  },
+  {
+   "id": "w27",
+   "query": "Which architecture, developed in 1997, became the standard RNN variant for long-term dependencies?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "recurrent_neural_network",
+     "content_marker": "long short-term memory (LSTM) architecture in 1997, mak"
+    }
+   ],
+   "reference_answer": "This issue was addressed by the development of the long short-term memory (LSTM) architecture in 1997, making it the standard RNN variant for handling long-term dependencies.",
+   "answerable": true
+  },
+  {
+   "id": "w28",
+   "query": "Who developed gradient boosting in 1999 and 2001, alongside Llew Mason's functional perspective?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "gradient_boosting",
+     "content_marker": "Friedman, (in 1999 and later in 2001) simultaneously wi"
+    }
+   ],
+   "reference_answer": "Friedman, (in 1999 and later in 2001) simultaneously with the more general functional gradient boosting perspective of Llew Mason, Jonathan Baxter, Peter Bartlett and Marcus Frean.",
+   "answerable": true
+  },
+  {
+   "id": "w29",
+   "query": "Whose idea of searching over a random subset of decisions when splitting a node influenced Breiman's random forests?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "random_forest",
+     "content_marker": "Amit and Geman in order to construct a collection of de"
+    }
+   ],
+   "reference_answer": "The extension combines Breiman's \"bagging\" idea and random selection of features, introduced first by Ho and later independently by Amit and Geman in order to construct a collection of decision trees with controlled variance.",
+   "answerable": true
+  },
+  {
+   "id": "w30",
+   "query": "What lets support vector machines perform non-linear classification?",
+   "category": "cluster_discrimination",
+   "relevant_chunks": [
+    {
+     "document_id": "support_vector_machine",
+     "content_marker": "kernel trick, representing the data only through a set "
+    }
+   ],
+   "reference_answer": "In addition to performing linear classification, SVMs can efficiently perform non-linear classification using the kernel trick, representing the data only through a set of pairwise similarity comparisons between the original data points using a kernel function, thereby transforming them into coordinates in a higher-dimensional feature space.",
+   "answerable": true
+  }
+ ]
+}

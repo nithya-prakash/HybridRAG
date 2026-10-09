@@ -797,3 +797,25 @@ case, a mid-word line break not accounted for in the other) — fixed by correct
 See [`results/FINAL_REPORT.md`](results/FINAL_REPORT.md)'s Limitations section for the full,
 current list (dataset size/provenance, LLM-as-judge caveats, generation sample size, model
 dependency, local hardware, evaluation bias).
+
+## Harder retrieval set: 30 Wikipedia articles (2026-10-09)
+
+The 116-question set sits near ceiling (Recall@5 = 1.0), which hides what each retrieval stage adds.
+`datasets/wiki/` holds 30 Wikipedia articles (fetched by `fetch_wiki.py`, capped at 16K characters
+each, CC BY-SA 4.0) in confusable groups: six programming languages, four German rivers, five
+scientists, five energy sources, four German cities, six ML models. `build_wiki_eval.py` writes
+`datasets/wiki_eval.json`: 30 questions, one per article, each answered by one sentence.
+
+Reproduce (from `backend/`): `EVAL_DATASET=../eval/datasets/wiki_eval.json uv run python ../eval/run_eval.py --retrieval-only`
+
+| Variant | Recall@1 | Recall@5 | MRR | NDCG@5 |
+|---|---|---|---|---|
+| Dense only | 0.483 | 1.000 | 0.719 | 0.791 |
+| BM25 only | 0.550 | 0.900 | 0.708 | 0.743 |
+| Dense + BM25, naive merge | 0.483 | 1.000 | 0.714 | 0.787 |
+| Dense + BM25 + RRF | 0.650 | 1.000 | 0.806 | 0.855 |
+| Dense + BM25 + RRF + reranker | 0.817 | 1.000 | 0.911 | 0.934 |
+
+Here fusion and reranking each add clearly (+17 and +17 points of Recall@1). Caveats: 30 questions
+is small (one question is 3.3 points), I wrote them myself, and each is phrased close to its answer
+sentence, so absolute numbers are optimistic. The ordering of the variants is the useful result.

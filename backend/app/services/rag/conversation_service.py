@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.chat import ChatBackend, get_chat_backend
 from app.core.config import get_settings
 from app.core.logging import get_logger
+from app.core.tracing import start_trace
 from app.models.conversation import Conversation
 from app.models.message import Message, MessageRole
 from app.repositories.chunk_repository import ChunkRepository
@@ -154,6 +155,8 @@ class ConversationService:
         )
         await self._session.commit()
 
+        trace = start_trace("rag.ask", metadata={"conversation_id": str(conversation_id)})
+        retrieval_span = trace.child("rewrite_and_retrieve", input=raw_content)
         rewritten = await self._rewriter.rewrite(history, raw_content)
 
         retrieval_result = await self._retrieval.retrieve(rewritten, user_id)
@@ -161,6 +164,15 @@ class ConversationService:
         best_score = max(
             (r.rerank_score for r in results if r.rerank_score is not None), default=None
         )
+        retrieval_span.update(
+            output=rewritten,
+            metadata={
+                "candidates": len(results),
+                "best_rerank_score": best_score,
+                "timings_ms": retrieval_result.timings_ms,
+            },
+        )
+        retrieval_span.end()
 
         if best_score is None or best_score < self._min_rerank_score:
             logger.info(
@@ -182,6 +194,8 @@ class ConversationService:
             )
             await self._conversations.touch(conversation)
             await self._session.commit()
+            trace.update(metadata={"outcome": "declined", "best_rerank_score": best_score})
+            trace.end()
             yield AnswerToken(delta=content)
             yield AnswerComplete(
                 message_id=message.id,
@@ -198,10 +212,24 @@ class ConversationService:
         messages = build_messages(history, context_block, rewritten)
 
         full_text_parts: list[str] = []
-        async for delta in self._chat.stream_complete(messages):
-            full_text_parts.append(delta)
-            yield AnswerToken(delta=delta)
+        generation = trace.child(
+            "generate",
+            as_type="generation",
+            model=getattr(self._chat, "_model", None),
+            input=messages,
+        )
+        try:
+            async for delta in self._chat.stream_complete(messages):
+                full_text_parts.append(delta)
+                yield AnswerToken(delta=delta)
+        except BaseException as exc:
+            generation.update(level="ERROR", status_message=str(exc)[:200])
+            generation.end()
+            trace.end()
+            raise
         full_text = "".join(full_text_parts)
+        generation.update(output=full_text, metadata={"answer_chars": len(full_text)})
+        generation.end()
 
         citations = extract_citations(full_text, index_map, filenames)
         chunk_ids = [r.chunk_id for r in results]
@@ -226,6 +254,8 @@ class ConversationService:
             citation_count=len(citations),
             answer_length=len(full_text),
         )
+        trace.update(metadata={"outcome": "answered", "citations": len(citations)})
+        trace.end()
         yield AnswerComplete(
             message_id=message.id,
             content=full_text,

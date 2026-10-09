@@ -17,6 +17,7 @@ has actually happened).
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from dataclasses import dataclass, field
@@ -33,7 +34,8 @@ from app.repositories.user_repository import UserRepository
 from app.services.parsing import chunk_document, parse_document
 
 DATASET_DIR = Path(__file__).parent / "datasets"
-DATASET_PATH = DATASET_DIR / "knowledge_base_eval.json"
+# EVAL_DATASET points the harness at a different labeled set (e.g. datasets/wiki_eval.json).
+DATASET_PATH = Path(os.environ.get("EVAL_DATASET", DATASET_DIR / "knowledge_base_eval.json"))
 
 _WS_RE = re.compile(r"\s+")
 

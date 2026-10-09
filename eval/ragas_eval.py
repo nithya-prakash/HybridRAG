@@ -46,6 +46,7 @@ def score(samples: list[dict]) -> dict:
     from ragas import EvaluationDataset, SingleTurnSample, evaluate
     from ragas.llms import LangchainLLMWrapper
     from ragas.metrics import Faithfulness, LLMContextPrecisionWithReference
+    from ragas.run_config import RunConfig
 
     llm = LangchainLLMWrapper(
         ChatOpenAI(
@@ -69,6 +70,12 @@ def score(samples: list[dict]) -> dict:
     df = evaluate(
         dataset,
         metrics=[Faithfulness(llm=llm), LLMContextPrecisionWithReference(llm=llm)],
+        run_config=RunConfig(
+            # low default: hosted free tiers rate-limit tokens per minute
+            max_workers=int(os.getenv("JUDGE_WORKERS", "2")),
+            timeout=int(os.getenv("JUDGE_TIMEOUT", "240")),
+            max_retries=int(os.getenv("JUDGE_RETRIES", "12")),
+        ),
         raise_exceptions=False,
     ).to_pandas()
     cols = [c for c in ("faithfulness", "llm_context_precision_with_reference") if c in df]

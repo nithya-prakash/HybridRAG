@@ -17,13 +17,14 @@ Measured on my own labeled set: 116 questions over 8 documents (99 answerable, 1
 | Retrieval, dense + BM25 + RRF + reranker | Recall@1 **0.929**, Recall@5 **1.000**, MRR **0.980** |
 | Dense only (baseline) | Recall@1 0.924, Recall@5 0.995, MRR 0.976 |
 | BM25 only (baseline) | Recall@1 0.798, Recall@5 0.975, MRR 0.900 |
+| **Harder set**: 30 questions over 30 Wikipedia articles in confusable groups (similar languages, rivers, scientists...), Recall@1 | dense 0.483, BM25 0.550, hybrid RRF 0.650, **+ reranker 0.817** (Recall@5 1.00 for all but BM25 at 0.90) |
 | Hallucination guard (decline before generating) | accuracy 93.1%, precision 76.5%, recall 76.5% |
 | Generation, Groq `gpt-oss-120b`, 20-question sample (17 scored, 3 hit rate limits) | faithfulness 1.00, correctness 0.98 on answered; abstained correctly 14/20 (the 3 errored count as misses) |
 | Generation, local `qwen2.5:3b`, same 20 questions | faithfulness 0.43, correctness 0.50; abstained correctly 16/20 |
-| RAGAS cross-check (Groq judge) | faithfulness 1.00, context precision 1.00, but only 5 samples scored (rest timed out on rate limits) |
-| Tests | 247 backend + 34 eval, ruff clean |
+| RAGAS cross-check (Groq judge, paced), first 20-question sample | faithfulness 0.98, context precision 1.00 on all 11 answered samples |
+| Tests | 250 backend + 34 eval, ruff clean |
 
-Honest reading: the corpus is small and clean, so retrieval is near ceiling and the reranker adds only about +0.5 point of Recall@1 over dense alone. The 3B local model is the weak link in generation: the same questions score far higher on a 120B hosted model, so retrieval is not the bottleneck. The 120B judges its own answers, so those scores are optimistic. Details and caveats: [eval/RESULTS.md](eval/RESULTS.md).
+Honest reading: on my own 8-document corpus retrieval is near ceiling, so the reranker adds only +0.5 point of Recall@1. That is a weakness of the test set, so I added the harder Wikipedia set, where each stage clearly earns its place (Recall@1 0.48 → 0.65 → 0.82). It is still only 30 questions, each written from one source sentence, so lexical overlap flatters retrieval. The 3B local model is the weak link in generation: the same questions score far higher on a 120B hosted model, so retrieval is not the bottleneck. The 120B judges its own answers, so those scores are optimistic. Details and caveats: [eval/RESULTS.md](eval/RESULTS.md).
 
 ## Quickstart
 
@@ -40,6 +41,7 @@ Frontend http://localhost:3000, API docs http://localhost:8000/docs. First boot 
 | `EMBEDDING_PROVIDER` | `local` (default, bge-small) or `openai` |
 | `OLLAMA_BASE_URL`, `OLLAMA_CHAT_MODEL` | local model endpoint and name |
 | `OPENAI_API_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY` | only for the matching hosted provider |
+| `LANGFUSE_*` | optional tracing, see above |
 | `JWT_SECRET_KEY`, `CORS_ORIGINS` | must be set to non-defaults outside local/test; the app refuses to start otherwise |
 
 ## How it works
@@ -60,6 +62,12 @@ flowchart LR
 ```
 
 Stack: FastAPI, Postgres, Qdrant, Redis/Celery, Next.js. Every query is filtered by user at the retrieval layer, so one user cannot see another's documents. More in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+### Tracing (optional)
+
+Set `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` and `LANGFUSE_HOST` and every question becomes a Langfuse trace: `rag.ask` → `rewrite_and_retrieve` (with per-stage timings) → `generate` (model, output). Off by default; install with `uv sync --extra tracing`. Question and answer text are sent only if `LANGFUSE_CAPTURE_CONTENT=true`. Verified against a local Langfuse v4 server; not run against Langfuse Cloud.
+
+![Langfuse trace of one answered question](docs/screenshots/langfuse_trace.png)
 
 ## Usage
 
@@ -84,7 +92,7 @@ Optional: `automation/n8n/document_intake.json` is an n8n workflow that ingests 
 ```
 backend/   FastAPI app, Alembic migrations, tests
 frontend/  Next.js UI
-eval/      labeled dataset, metrics, run scripts, RAGAS cross-check, reranker experiment
+eval/      labeled datasets (own corpus + Wikipedia), metrics, run scripts, RAGAS, reranker experiment
 infra/     dev docker-compose and Dockerfiles
 docs/      ARCHITECTURE, API, DEPLOY_FREE_TIER, PROGRESS, details
 automation/n8n/  document-intake workflow (run once, see its README)
@@ -98,6 +106,7 @@ uv run ruff check . && uv run pytest              # backend tests
 uv run pytest ../eval/tests                       # eval tests
 uv run python ../eval/run_eval.py --retrieval-only   # retrieval table, no LLM
 uv run python ../eval/run_all.py                  # retrieval + guard + latency
+EVAL_DATASET=../eval/datasets/wiki_eval.json uv run python ../eval/run_eval.py --retrieval-only   # harder set
 pip install -r ../eval/requirements-ragas.txt     # in a separate venv
 CHAT_PROVIDER=groq uv run python ../eval/run_eval.py --output ../eval/results/generation_groq.json   # then:
 python ../eval/ragas_eval.py ../eval/results/generation_groq.json   # JUDGE_* env vars select the judge
