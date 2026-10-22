@@ -1,0 +1,31 @@
+#!/bin/bash
+# Bootstraps the HybridRAG prod compose stack on Amazon Linux 2023.
+# Runs once at first boot as root; log: /var/log/hybridrag-bootstrap.log
+set -euo pipefail
+exec > >(tee -a /var/log/hybridrag-bootstrap.log) 2>&1
+
+dnf install -y docker git
+systemctl enable --now docker
+
+# Docker Compose v2 plugin
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+git clone --branch "${repo_ref}" "${repo_url}" /opt/hybridrag
+cd /opt/hybridrag
+
+# Secrets come from SSM Parameter Store (SecureString), never from Terraform state or the repo.
+aws ssm get-parameter --region "${region}" --name "${env_parameter_name}" \
+  --with-decryption --query Parameter.Value --output text > .env
+chmod 600 .env
+
+# Point uploads at S3 (the instance role grants access; no keys in .env).
+{
+  echo "STORAGE_BACKEND=s3"
+  echo "S3_BUCKET=${s3_bucket}"
+  echo "S3_REGION=${region}"
+} >> .env
+
+docker compose -f docker-compose.prod.yml up -d --build

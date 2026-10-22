@@ -62,3 +62,9 @@ eval/reranker_training/data/*.jsonl
 !eval/reranker_training/data/dataset_stats.json
 eval/reranker_training/models/finetuned/
 eval/reranker_training/models/_trainer_checkpoints/
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate*
+infra/terraform/*.tfvars
+infra/terraform/prod.env

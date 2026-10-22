@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -139,6 +139,12 @@ class Settings(BaseSettings):
     # Uploads
     max_upload_size_mb: int = 50
     upload_dir: str = "/data/uploads"
+    # "local" (default) writes under upload_dir; "s3" stores blobs in S3_BUCKET using the
+    # instance's IAM role (requires the `aws` extra: boto3). See infra/terraform/.
+    storage_backend: Literal["local", "s3"] = "local"
+    s3_bucket: str = ""
+    s3_prefix: str = "uploads"
+    s3_region: str = ""
 
     # Chunking
     chunk_max_tokens: int = 500
@@ -206,6 +212,12 @@ class Settings(BaseSettings):
     # echoed back on, so a request can be correlated end to end across a
     # proxy, this API, and any Celery task it enqueues.
     request_id_header: str = "X-Request-ID"
+
+    @model_validator(mode="after")
+    def _require_bucket_for_s3(self) -> "Settings":
+        if self.storage_backend == "s3" and not self.s3_bucket:
+            raise ValueError("S3_BUCKET is required when STORAGE_BACKEND=s3")
+        return self
 
 
 @lru_cache

@@ -12,7 +12,7 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 COPY backend/pyproject.toml backend/uv.lock* ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-install-project --no-dev
+    uv sync --no-install-project --no-dev --extra aws
 
 # tiktoken downloads its BPE encoding file over HTTPS on first use unless cached.
 # Baking it into the image at build time means the worker never has a runtime
@@ -40,7 +40,7 @@ COPY backend/app ./app
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev
+    uv sync --no-dev --extra aws
 
 FROM python:3.12-slim AS runtime
 

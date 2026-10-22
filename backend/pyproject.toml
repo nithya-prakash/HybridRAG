@@ -37,6 +37,8 @@ dependencies = [
 [project.optional-dependencies]
 # Optional Langfuse tracing (app/core/tracing.py); a no-op unless LANGFUSE_* keys are set.
 tracing = ["langfuse>=4.0.0"]
+# S3 blob storage (STORAGE_BACKEND=s3, app/core/storage.py); credentials come from the IAM role.
+aws = ["boto3>=1.35.0"]
 
 [dependency-groups]
 dev = [
@@ -45,6 +47,8 @@ dev = [
     "ruff>=0.7.0",
     "pip-audit>=2.7.0",
     "pytest-cov>=6.0.0",
+    "moto[s3]>=5.0.0",
+    "boto3>=1.35.0",
 ]
 # Only needed to RUN eval/reranker_training/train_reranker.py — the
 # CrossEncoderTrainer API these back (sentence-transformers, already a real
