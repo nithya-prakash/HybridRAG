@@ -14,18 +14,24 @@ curl -fsSL "https://github.com/docker/compose/releases/download/v2.29.7/docker-c
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 git clone --branch "${repo_ref}" "${repo_url}" /opt/hybridrag
-cd /opt/hybridrag
 
-# Secrets come from SSM Parameter Store (SecureString), never from Terraform state or the repo.
+# Re-runnable deploy step: re-reads the env file from SSM (so a changed NEXT_PUBLIC_API_URL or
+# CORS_ORIGINS takes effect), points uploads at S3 (the instance role grants access; no keys in
+# .env) and rebuilds. Secrets come from SSM Parameter Store, never Terraform state or the repo.
+cat > /usr/local/bin/hybridrag-redeploy <<'SCRIPT'
+#!/bin/bash
+set -euo pipefail
+cd /opt/hybridrag
 aws ssm get-parameter --region "${region}" --name "${env_parameter_name}" \
   --with-decryption --query Parameter.Value --output text > .env
 chmod 600 .env
-
-# Point uploads at S3 (the instance role grants access; no keys in .env).
 {
   echo "STORAGE_BACKEND=s3"
   echo "S3_BUCKET=${s3_bucket}"
   echo "S3_REGION=${region}"
 } >> .env
-
 docker compose -f docker-compose.prod.yml up -d --build
+SCRIPT
+chmod +x /usr/local/bin/hybridrag-redeploy
+
+/usr/local/bin/hybridrag-redeploy

@@ -15,21 +15,72 @@ Auth to S3 is the instance's IAM role, with no access keys anywhere.
 
 ## Deploy
 
-1. Store the production env file as a SecureString (secrets never enter Terraform state):
-   ```bash
-   cp ../../.env.prod.example prod.env   # fill in every blank value
-   aws ssm put-parameter --name /hybridrag/prod/env --type SecureString \
-     --value file://prod.env --region eu-central-1
-   rm prod.env
-   ```
-2. Apply:
-   ```bash
-   terraform init
-   terraform plan  -var budget_alert_email=you@example.com -var 'allowed_cidrs=["YOUR.IP/32"]'
-   terraform apply -var budget_alert_email=you@example.com -var 'allowed_cidrs=["YOUR.IP/32"]'
-   ```
-3. Wait a few minutes (first boot builds images and pulls the Ollama model), then open `frontend_url`.
-   Bootstrap log: `aws ssm start-session --target <id>` then `tail -f /var/log/hybridrag-bootstrap.log`.
+### 1. Prerequisites
+
+AWS account (MFA on root, a non-root admin user or SSO), then:
+```bash
+brew install awscli
+brew tap hashicorp/tap && brew install hashicorp/tap/terraform
+aws configure sso            # or: aws configure
+aws sts get-caller-identity  # confirm the account
+```
+
+### 2. Prepare the env file
+
+```bash
+cp ../../.env.prod.example prod.env   # fill in every blank value (openssl rand -hex 32 for secrets)
+```
+
+Two settings need care on this plain-HTTP, IP-addressed demo:
+
+- **`COOKIE_SECURE=false`.** The template says `true`, but browsers will not send secure cookies
+  over `http://`, so login would silently fail. The app's startup checks accept `false`. Switch it
+  back to `true` once you put a domain and TLS in front.
+- **`NEXT_PUBLIC_API_URL` and `CORS_ORIGINS` depend on the Elastic IP, which Terraform creates.**
+  `NEXT_PUBLIC_API_URL` is baked into the frontend at build time. Put placeholders in for the first
+  pass (for example `http://localhost:8000` and `["http://localhost:3000"]`) and fix them in step 5.
+
+Upload it, then delete the local copy:
+```bash
+aws ssm put-parameter --name /hybridrag/prod/env --type SecureString \
+  --value file://prod.env --region eu-central-1
+rm prod.env
+```
+
+### 3. Plan and apply
+
+```bash
+terraform init
+terraform plan  -var budget_alert_email=you@example.com -var 'allowed_cidrs=["YOUR.IP/32"]'
+terraform apply -var budget_alert_email=you@example.com -var 'allowed_cidrs=["YOUR.IP/32"]'
+```
+
+Find your IP with `curl -s https://checkip.amazonaws.com`. Read the plan first: it should only
+create resources. The outputs give `public_ip`, `frontend_url`, `api_url` and an SSM command.
+
+### 4. First boot (10 to 20 minutes)
+
+The instance installs Docker, clones the repo and runs `hybridrag-redeploy`, which builds the
+images and pulls the Ollama model. Watch it (needs `brew install --cask session-manager-plugin`):
+```bash
+aws ssm start-session --target <instance-id> --region eu-central-1
+sudo tail -f /var/log/hybridrag-bootstrap.log
+```
+
+### 5. Second pass: set the real URLs
+
+Edit the SSM parameter so `NEXT_PUBLIC_API_URL=http://<public_ip>:8000` and
+`CORS_ORIGINS=["http://<public_ip>:3000"]`, write it back with `put-parameter --overwrite`, then in
+an SSM session run:
+```bash
+sudo hybridrag-redeploy
+```
+The script re-reads the parameter, re-adds the S3 settings and rebuilds the frontend.
+
+### 6. Verify
+
+Open `frontend_url`, register, upload a PDF and ask a question. Confirm the upload reached S3:
+`aws s3 ls s3://<uploads_bucket>/uploads/ --recursive`, and `curl http://<public_ip>:8000/health`.
 
 ## Cost and teardown
 
