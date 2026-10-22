@@ -84,8 +84,12 @@ Open `frontend_url`, register, upload a PDF and ask a question. Confirm the uplo
 
 ## Cost and teardown
 
-A `t3.large` plus EIP and 40 GB EBS is roughly 70 to 80 USD per month if left running. The free
-tier does not cover it. Run `terraform destroy` when you finish a demo. The S3 bucket must be
+The default `m7i-flex.large` (8 GB, x86_64) is on AWS's free-plan eligible list for accounts created
+after 15 July 2025, so a short demo should be covered by the sign-up credits (verify the list for your
+account and region with `aws ec2 describe-instance-types --filters Name=free-tier-eligible,Values=true`).
+It is not free forever: left running past the credits or the 6-month free plan it costs roughly 70 to
+80 USD per month with the Elastic IP and 40 GB EBS. `t3.large` is the same size but not eligible.
+Run `terraform destroy` as soon as you finish a demo. The S3 bucket must be
 empty first (it is versioned), so empty it with `aws s3 rm s3://<bucket> --recursive` and delete
 old versions if needed.
 

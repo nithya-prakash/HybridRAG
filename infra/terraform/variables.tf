@@ -11,9 +11,9 @@ variable "name" {
 }
 
 variable "instance_type" {
-  description = "EC2 size. The prod compose stack runs Postgres, Redis, Qdrant, Ollama, the API, a Celery worker and the frontend, so it needs 8 GB (t3.large). Use t3.medium only with CHAT_PROVIDER=groq/openai and no Ollama."
+  description = "EC2 size. The prod compose stack runs Postgres, Redis, Qdrant, Ollama, the API, a Celery worker and the frontend, so it needs 8 GB. m7i-flex.large (8 GB) is on the free-plan eligible list for accounts created after 2025-07-15; t3.large is the same size but is not eligible. Check availability in your region with `aws ec2 describe-instance-type-offerings --location-type region --filters Name=instance-type,Values=m7i-flex.large`, and use t3.medium only with CHAT_PROVIDER=groq/openai and no Ollama."
   type        = string
-  default     = "t3.large"
+  default     = "m7i-flex.large"
 }
 
 variable "root_volume_gb" {
